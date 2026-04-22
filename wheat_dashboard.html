@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rostlinná výroba — Dashboard (Jižní Morava)</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-treemap@3"></script>
+<style>
+  :root{
+    --bg:#f3f2f1; --card:#ffffff; --hdr:#1f2937;
+    --txt:#111827; --muted:#6b7280; --border:#e5e7eb;
+    --accent:#f2c811; --blue:#118DFF; --green:#2ca02c; --red:#d13438;
+    --amber:#f59e0b; --purple:#8764b8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:var(--txt);font-size:13px}
+  .dash{max-width:1600px;margin:0 auto;padding:12px}
+  .hdr{background:var(--hdr);color:#fff;padding:14px 20px;border-radius:6px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+  .hdr h1{font-size:18px;font-weight:600}
+  .hdr .sub{font-size:12px;color:#9ca3af;margin-top:2px}
+  .filters{display:flex;gap:10px;flex-wrap:wrap}
+  .flt{display:flex;flex-direction:column;gap:4px}
+  .flt label{font-size:11px;color:#d1d5db;text-transform:uppercase;letter-spacing:.5px}
+  .flt select{padding:5px 8px;border-radius:4px;border:1px solid #374151;background:#111827;color:#fff;font-size:12px;min-width:140px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px}
+  .kpi{background:var(--card);border-radius:6px;padding:14px 16px;box-shadow:0 1px 2px rgba(0,0,0,.06);border-left:3px solid var(--blue)}
+  .kpi.green{border-color:var(--green)} .kpi.red{border-color:var(--red)} .kpi.amber{border-color:var(--amber)} .kpi.purple{border-color:var(--purple)}
+  .kpi-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .kpi-val{font-size:24px;font-weight:700;color:var(--txt)}
+  .kpi-chg{font-size:11px;margin-top:2px}
+  .kpi-chg.pos{color:var(--green)} .kpi-chg.neg{color:var(--red)}
+  .row{display:grid;gap:10px;margin-bottom:10px}
+  .row-2{grid-template-columns:1fr 1fr}
+  .row-3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--card);border-radius:6px;padding:14px 16px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .card h3{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--txt)}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .card-head h3{margin-bottom:0}
+  .chart-box{position:relative;height:280px}
+  .chart-box.tall{height:340px}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:5px;overflow:hidden}
+  .seg button{background:#fff;border:0;padding:4px 10px;font-size:11px;color:var(--muted);cursor:pointer}
+  .seg button.on{background:#eff6ff;color:#1e40af;font-weight:600}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  thead th{text-align:left;padding:8px 10px;background:#f9fafb;border-bottom:2px solid var(--border);font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;cursor:pointer;user-select:none}
+  thead th:hover{background:#f3f4f6}
+  tbody td{padding:7px 10px;border-bottom:1px solid var(--border)}
+  tbody tr:hover{background:#f9fafb}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  td.neg{color:var(--red)} td.pos{color:var(--green)}
+  .chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;color:#fff}
+  .chip.WHEAT{background:#118DFF}.chip.RAPE{background:#E66C37}.chip.BARLEY{background:#D9B300}
+  .footer{text-align:right;color:var(--muted);font-size:11px;padding:8px 4px}
+  @media (max-width:1024px){.row-2,.row-3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="dash">
+  <div class="hdr">
+    <div>
+      <h1>Rostlinná výroba — produkční dashboard</h1>
+      <div class="sub">Pšenice · Řepka · Ječmen jarní · Jižní Morava (Hustopečsko) · 2023–2025 · MATIF Paris × ČNB</div>
+    </div>
+    <div class="filters">
+      <div class="flt"><label>Plodina</label><select id="f-crop"><option value="all">Všechny</option></select></div>
+      <div class="flt"><label>Rok</label><select id="f-year"><option value="all">Všechny</option></select></div>
+      <div class="flt"><label>Katastr</label><select id="f-region"><option value="all">Všechny</option></select></div>
+      <div class="flt"><label>Půdní blok</label><select id="f-block"><option value="all">Všechny</option></select></div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-lbl">Produkce (t)</div><div class="kpi-val" id="k-prod">–</div><div class="kpi-chg" id="k-prod-ch"></div></div>
+    <div class="kpi amber"><div class="kpi-lbl">Prům. výnos (t/ha)</div><div class="kpi-val" id="k-yld">–</div><div class="kpi-chg" id="k-yld-ch"></div></div>
+    <div class="kpi purple"><div class="kpi-lbl">Tržby (CZK)</div><div class="kpi-val" id="k-rev">–</div><div class="kpi-chg" id="k-rev-ch"></div></div>
+    <div class="kpi red"><div class="kpi-lbl">Náklady (CZK)</div><div class="kpi-val" id="k-cost">–</div><div class="kpi-chg" id="k-cost-ch"></div></div>
+    <div class="kpi green"><div class="kpi-lbl">Hrubá marže (CZK)</div><div class="kpi-val" id="k-gm">–</div><div class="kpi-chg" id="k-gm-ch"></div></div>
+    <div class="kpi"><div class="kpi-lbl">Marže %</div><div class="kpi-val" id="k-gmp">–</div><div class="kpi-chg" id="k-gmp-ch"></div></div>
+  </div>
+
+  <div class="row row-2">
+    <div class="card"><h3 id="ch-price-title">Vývoj cen — MATIF vs. realizační prodejní cena (CZK/t)</h3><div class="chart-box tall"><canvas id="ch-price"></canvas></div></div>
+    <div class="card"><h3 id="ch-yl-title">Výnosy dle bloku (t/ha) — všechna období</h3><div class="chart-box tall"><canvas id="ch-yield-lines"></canvas></div></div>
+  </div>
+
+  <div class="row row-3">
+    <div class="card"><h3>Struktura nákladů (CZK/ha)</h3><div class="chart-box"><canvas id="ch-cost"></canvas></div></div>
+    <div class="card"><h3>Hrubá marže dle bloku (CZK/ha)</h3><div class="chart-box"><canvas id="ch-gm"></canvas></div></div>
+    <div class="card"><h3>Tržby vs. náklady (CZK)</h3><div class="chart-box"><canvas id="ch-rc"></canvas></div></div>
+  </div>
+
+  <div class="row row-2">
+    <div class="card">
+      <div class="card-head">
+        <h3 id="ch-bub-title">Plocha × výnos × zisk (bublina = hrubá marže)</h3>
+        <div class="seg" id="bub-mode">
+          <button data-mode="by-crop" class="on">Plodiny v roce</button>
+          <button data-mode="by-year">Plodina v letech</button>
+        </div>
+      </div>
+      <div class="chart-box tall"><canvas id="ch-bubble"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3 id="ch-tm-title">Hrubá marže dle plodiny a bloku — treemap</h3>
+        <div class="seg" id="tm-mode">
+          <button data-mode="all-crops" class="on">Všechny plodiny</button>
+          <button data-mode="one-crop">Plodina po blocích</button>
+        </div>
+      </div>
+      <div id="tm-legend" style="display:flex;gap:14px;font-size:11px;color:var(--muted);margin-bottom:6px;flex-wrap:wrap"></div>
+      <div class="chart-box tall"><canvas id="ch-treemap"></canvas></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card"><h3>Srovnání plodin — GM CZK/ha dle roku</h3><div class="chart-box"><canvas id="ch-crop-cmp"></canvas></div></div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <h3>Detail — blok × rok × plodina</h3>
+      <div style="overflow-x:auto"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="footer">Zdroje: MATIF Paris (blé meunier, colza) · EU spot sladovnický ječmen · ČNB. Modelová data pro demonstraci — viz wheat_data.xlsx.</div>
+</div>
+
+<script>
+const DATA = {"blocks":[{"BlockID":"PB-01","Block_Name":"Široký lán","Area_ha":45.2,"Soil_Type":"Černozem","Region":"k.ú. Velké Pavlovice","BPEJ":92},{"BlockID":"PB-02","Block_Name":"Pod Vinohrady","Area_ha":38.5,"Soil_Type":"Černozem","Region":"k.ú. Velké Pavlovice","BPEJ":94},{"BlockID":"PB-03","Block_Name":"U Hájku","Area_ha":52.1,"Soil_Type":"Černozem","Region":"k.ú. Velké Pavlovice","BPEJ":88},{"BlockID":"PB-04","Block_Name":"Trkmanský","Area_ha":28.7,"Soil_Type":"Černozem","Region":"k.ú. Bořetice","BPEJ":93},{"BlockID":"PB-05","Block_Name":"Za Humnami","Area_ha":41.3,"Soil_Type":"Černozem","Region":"k.ú. Bořetice","BPEJ":90},{"BlockID":"PB-06","Block_Name":"Dlouhý kus","Area_ha":33.8,"Soil_Type":"Hnědozem","Region":"k.ú. Bořetice","BPEJ":85},{"BlockID":"PB-07","Block_Name":"U Trati","Area_ha":47.6,"Soil_Type":"Černozem","Region":"k.ú. Velké Pavlovice","BPEJ":91},{"BlockID":"PB-08","Block_Name":"Pod Růžovou","Area_ha":35.4,"Soil_Type":"Černozem","Region":"k.ú. Vrbice","BPEJ":89},{"BlockID":"PB-09","Block_Name":"Nová pole","Area_ha":55.9,"Soil_Type":"Černozem","Region":"k.ú. Vrbice","BPEJ":87},{"BlockID":"PB-10","Block_Name":"Stará vinice","Area_ha":30.2,"Soil_Type":"Hnědozem","Region":"k.ú. Vrbice","BPEJ":82}],"crops":[{"CropID":"WHEAT","Crop_Name":"Pšenice ozimá","Crop_Type":"Ozimá","Market":"MATIF blé meunier (Euronext)"},{"CropID":"RAPE","Crop_Name":"Řepka ozimá","Crop_Type":"Ozimá","Market":"MATIF colza (Euronext)"},{"CropID":"BARLEY","Crop_Name":"Ječmen jarní","Crop_Type":"Jarní","Market":"Sladovnický ječmen (EU spot/OTC)"}],"harvests":[{"HarvestID":"H-001","BlockID":"PB-01","CropID":"WHEAT","Year":2023,"Area_ha":45.5,"Yield_t_ha":7.2,"Production_t":327.6,"Osivo":2557,"Hnojiva":8775,"POR":4578,"Mechanizace":6290,"Najem":4025,"Pojisteni":768,"Ostatni":1485,"Cost_CZK_ha":28478,"Total_Cost":1295749,"Price_CZK_t":5817.92166666667,"Revenue":1905951.138,"GM_CZK":610202.138,"GM_CZK_ha":13411.036,"GM_Pct":0.320156233721874},{"HarvestID":"H-002","BlockID":"PB-01","CropID":"RAPE","Year":2023,"Area_ha":41.3,"Yield_t_ha":3.78,"Production_t":156.114,"Osivo":4133,"Hnojiva":11212,"POR":7046,"Mechanizace":6337,"Najem":4025,"Pojisteni":921,"Ostatni":1791,"Cost_CZK_ha":35465,"Total_Cost":1464704.5,"Price_CZK_t":11324.6166666667,"Revenue":1767931.2063,"GM_CZK":303226.7063,"GM_CZK_ha":7342.05099999999,"GM_Pct":0.171514991770865},{"HarvestID":"H-003","BlockID":"PB-01","CropID":"BARLEY","Year":2023,"Area_ha":41.9,"Yield_t_ha":5.63,"Production_t":235.897,"Osivo":2183,"Hnojiva":6338,"POR":3129,"Mechanizace":5070,"Najem":4025,"Pojisteni":730,"Ostatni":1293,"Cost_CZK_ha":22768,"Total_Cost":953979.2,"Price_CZK_t":5682.95833333333,"Revenue":1340592.82195833,"GM_CZK":386613.621958333,"GM_CZK_ha":9227.05541666667,"GM_Pct":0.288390043289632},{"HarvestID":"H-004","BlockID":"PB-01","CropID":"WHEAT","Year":2024,"Area_ha":45.8,"Yield_t_ha":6.8,"Production_t":311.44,"Osivo":2798,"Hnojiva":9477,"POR":4884,"Mechanizace":6189,"Najem":4347,"Pojisteni":907,"Ostatni":1674,"Cost_CZK_ha":30276,"Total_Cost":1386640.8,"Price_CZK_t":5426.9875,"Revenue":1690180.987,"GM_CZK":303540.187,"GM_CZK_ha":6627.515,"GM_Pct":0.17959034525573},{"HarvestID":"H-005","BlockID":"PB-01","CropID":"RAPE","Year":2024,"Area_ha":41,"Yield_t_ha":3.39,"Production_t":138.99,"Osivo":4749,"Hnojiva":12110,"POR":7657,"Mechanizace":7265,"Najem":4347,"Pojisteni":992,"Ostatni":1941,"Cost_CZK_ha":39061,"Total_Cost":1601501,"Price_CZK_t":12398.1541666667,"Revenue":1723219.447625,"GM_CZK":121718.447625,"GM_CZK_ha":2968.74262500001,"GM_Pct":0.0706343279683599},{"HarvestID":"H-006","BlockID":"PB-01","CropID":"BARLEY","Year":2024,"Area_ha":41.8,"Yield_t_ha":5.46,"Production_t":228.228,"Osivo":2308,"Hnojiva":6845,"POR":3422,"Mechanizace":5368,"Najem":4347,"Pojisteni":747,"Ostatni":1472,"Cost_CZK_ha":24509,"Total_Cost":1024476.2,"Price_CZK_t":5469.54166666667,"Revenue":1248302.5555,"GM_CZK":223826.3555,"GM_CZK_ha":5354.6975,"GM_Pct":0.179304572047718},{"HarvestID":"H-007","BlockID":"PB-01","CropID":"WHEAT","Year":2025,"Area_ha":45.7,"Yield_t_ha":6.1,"Production_t":278.77,"Osivo":2734,"Hnojiva":9828,"POR":5183,"Mechanizace":6690,"Najem":4508,"Pojisteni":889,"Ostatni":1757,"Cost_CZK_ha":31589,"Total_Cost":1443617.3,"Price_CZK_t":5220.51666666667,"Revenue":1455323.43116667,"GM_CZK":11706.1311666665,"GM_CZK_ha":256.151666666663,"GM_Pct":0.00804366295214682},{"HarvestID":"H-008","BlockID":"PB-01","CropID":"RAPE","Year":2025,"Area_ha":41.5,"Yield_t_ha":3.24,"Production_t":134.46,"Osivo":4937,"Hnojiva":12558,"POR":7658,"Mechanizace":7439,"Najem":4508,"Pojisteni":1027,"Ostatni":1975,"Cost_CZK_ha":40102,"Total_Cost":1664233,"Price_CZK_t":12392.9583333333,"Revenue":1666357.1775,"GM_CZK":2124.17750000022,"GM_CZK_ha":51.1850000000054,"GM_Pct":0.00127474321152868},{"HarvestID":"H-009","BlockID":"PB-01","CropID":"BARLEY","Year":2025,"Area_ha":43.1,"Yield_t_ha":5.17,"Production_t":222.827,"Osivo":2579,"Hnojiva":7098,"POR":3612,"Mechanizace":5849,"Najem":4508,"Pojisteni":803,"Ostatni":1392,"Cost_CZK_ha":25841,"Total_Cost":1113747.1,"Price_CZK_t":5301.41666666667,"Revenue":1181298.77158333,"GM_CZK":67551.6715833333,"GM_CZK_ha":1567.32416666667,"GM_Pct":0.057184239252862},{"HarvestID":"H-010","BlockID":"PB-02","CropID":"WHEAT","Year":2023,"Area_ha":38,"Yield_t_ha":8.1,"Production_t":307.8,"Osivo":2521,"Hnojiva":9000,"POR":4501,"Mechanizace":6212,"Najem":4112,"Pojisteni":773,"Ostatni":1569,"Cost_CZK_ha":28688,"Total_Cost":1090144,"Price_CZK_t":5817.92166666667,"Revenue":1790756.289,"GM_CZK":700612.289,"GM_CZK_ha":18437.1655,"GM_Pct":0.391238212203202},{"HarvestID":"H-011","BlockID":"PB-02","CropID":"RAPE","Year":2023,"Area_ha":34,"Yield_t_ha":4.39,"Production_t":149.26,"Osivo":4024,"Hnojiva":11500,"POR":6586,"Mechanizace":6562,"Najem":4112,"Pojisteni":967,"Ostatni":1752,"Cost_CZK_ha":35503,"Total_Cost":1207102,"Price_CZK_t":11324.6166666667,"Revenue":1690312.28366667,"GM_CZK":483210.283666667,"GM_CZK_ha":14212.0671666667,"GM_Pct":0.285870420712127},{"HarvestID":"H-012","BlockID":"PB-02","CropID":"BARLEY","Year":2023,"Area_ha":36.1,"Yield_t_ha":6.39,"Production_t":230.679,"Osivo":2116,"Hnojiva":6500,"POR":3325,"Mechanizace":5068,"Najem":4112,"Pojisteni":707,"Ostatni":1316,"Cost_CZK_ha":23144,"Total_Cost":835498.4,"Price_CZK_t":5682.95833333333,"Revenue":1310939.145375,"GM_CZK":475440.745375,"GM_CZK_ha":13170.10375,"GM_Pct":0.362671865473205},{"HarvestID":"H-013","BlockID":"PB-02","CropID":"WHEAT","Year":2024,"Area_ha":38.7,"Yield_t_ha":7.5,"Production_t":290.25,"Osivo":2678,"Hnojiva":9720,"POR":4901,"Mechanizace":6495,"Najem":4442,"Pojisteni":902,"Ostatni":1572,"Cost_CZK_ha":30710,"Total_Cost":1188477,"Price_CZK_t":5426.9875,"Revenue":1575183.121875,"GM_CZK":386706.121875,"GM_CZK_ha":9992.40625,"GM_Pct":0.245499152768149},{"HarvestID":"H-014","BlockID":"PB-02","CropID":"RAPE","Year":2024,"Area_ha":34,"Yield_t_ha":3.82,"Production_t":129.88,"Osivo":4634,"Hnojiva":12420,"POR":7152,"Mechanizace":6947,"Najem":4442,"Pojisteni":1044,"Ostatni":1905,"Cost_CZK_ha":38544,"Total_Cost":1310496,"Price_CZK_t":12398.1541666667,"Revenue":1610272.26316667,"GM_CZK":299776.263166667,"GM_CZK_ha":8816.94891666667,"GM_Pct":0.186164954848781},{"HarvestID":"H-015","BlockID":"PB-02","CropID":"BARLEY","Year":2024,"Area_ha":36.5,"Yield_t_ha":5.87,"Production_t":214.255,"Osivo":2332,"Hnojiva":7020,"POR":3543,"Mechanizace":5376,"Najem":4442,"Pojisteni":753,"Ostatni":1474,"Cost_CZK_ha":24940,"Total_Cost":910310,"Price_CZK_t":5469.54166666667,"Revenue":1171876.64979167,"GM_CZK":261566.649791667,"GM_CZK_ha":7166.20958333334,"GM_Pct":0.223203226925093},{"HarvestID":"H-016","BlockID":"PB-02","CropID":"WHEAT","Year":2025,"Area_ha":38.1,"Yield_t_ha":7,"Production_t":266.7,"Osivo":2939,"Hnojiva":10080,"POR":4825,"Mechanizace":6527,"Najem":4606,"Pojisteni":875,"Ostatni":1753,"Cost_CZK_ha":31605,"Total_Cost":1204150.5,"Price_CZK_t":5220.51666666667,"Revenue":1392311.795,"GM_CZK":188161.295,"GM_CZK_ha":4938.61666666667,"GM_Pct":0.135143073322883},{"HarvestID":"H-017","BlockID":"PB-02","CropID":"RAPE","Year":2025,"Area_ha":34.4,"Yield_t_ha":3.47,"Production_t":119.368,"Osivo":4883,"Hnojiva":12880,"POR":7905,"Mechanizace":7185,"Najem":4606,"Pojisteni":1028,"Ostatni":2083,"Cost_CZK_ha":40570,"Total_Cost":1395608,"Price_CZK_t":12392.9583333333,"Revenue":1479322.65033333,"GM_CZK":83714.6503333333,"GM_CZK_ha":2433.56541666667,"GM_Pct":0.0565898523317209},{"HarvestID":"H-018","BlockID":"PB-02","CropID":"BARLEY","Year":2025,"Area_ha":37,"Yield_t_ha":5.81,"Production_t":214.97,"Osivo":2514,"Hnojiva":7280,"POR":3624,"Mechanizace":6108,"Najem":4606,"Pojisteni":796,"Ostatni":1384,"Cost_CZK_ha":26312,"Total_Cost":973544,"Price_CZK_t":5301.41666666667,"Revenue":1139645.54083333,"GM_CZK":166101.540833334,"GM_CZK_ha":4489.23083333334,"GM_Pct":0.145748423419335},{"HarvestID":"H-019","BlockID":"PB-03","CropID":"WHEAT","Year":2023,"Area_ha":49.6,"Yield_t_ha":5.8,"Production_t":287.68,"Osivo":2579,"Hnojiva":9225,"POR":4410,"Mechanizace":6098,"Najem":3850,"Pojisteni":835,"Ostatni":1445,"Cost_CZK_ha":28442,"Total_Cost":1410723.2,"Price_CZK_t":5817.92166666667,"Revenue":1673699.70506667,"GM_CZK":262976.505066667,"GM_CZK_ha":5301.94566666666,"GM_Pct":0.157122872323259},{"HarvestID":"H-020","BlockID":"PB-03","CropID":"RAPE","Year":2023,"Area_ha":45.2,"Yield_t_ha":2.79,"Production_t":126.108,"Osivo":4038,"Hnojiva":11787,"POR":6533,"Mechanizace":6535,"Najem":3850,"Pojisteni":928,"Ostatni":1819,"Cost_CZK_ha":35490,"Total_Cost":1604148,"Price_CZK_t":11324.6166666667,"Revenue":1428124.7586,"GM_CZK":-176023.2414,"GM_CZK_ha":-3894.3195,"GM_Pct":-0.123254806934764},{"HarvestID":"H-021","BlockID":"PB-03","CropID":"BARLEY","Year":2023,"Area_ha":50.9,"Yield_t_ha":4.64,"Production_t":236.176,"Osivo":2248,"Hnojiva":6662,"POR":3105,"Mechanizace":5270,"Najem":3850,"Pojisteni":683,"Ostatni":1299,"Cost_CZK_ha":23117,"Total_Cost":1176655.3,"Price_CZK_t":5682.95833333333,"Revenue":1342178.36733333,"GM_CZK":165523.067333333,"GM_CZK_ha":3251.92666666666,"GM_Pct":0.123324195473511},{"HarvestID":"H-022","BlockID":"PB-03","CropID":"WHEAT","Year":2024,"Area_ha":48.8,"Yield_t_ha":5.4,"Production_t":263.52,"Osivo":2809,"Hnojiva":9963,"POR":5028,"Mechanizace":6216,"Najem":4158,"Pojisteni":857,"Ostatni":1584,"Cost_CZK_ha":30615,"Total_Cost":1494012,"Price_CZK_t":5426.9875,"Revenue":1430119.746,"GM_CZK":-63892.254,"GM_CZK_ha":-1309.2675,"GM_Pct":-0.0446761567894609},{"HarvestID":"H-023","BlockID":"PB-03","CropID":"RAPE","Year":2024,"Area_ha":46.2,"Yield_t_ha":2.84,"Production_t":131.208,"Osivo":4311,"Hnojiva":12730,"POR":7543,"Mechanizace":7116,"Najem":4158,"Pojisteni":1002,"Ostatni":1991,"Cost_CZK_ha":38851,"Total_Cost":1794916.2,"Price_CZK_t":12398.1541666667,"Revenue":1626737.0119,"GM_CZK":-168179.1881,"GM_CZK_ha":-3640.24216666667,"GM_Pct":-0.103384374284058},{"HarvestID":"H-024","BlockID":"PB-03","CropID":"BARLEY","Year":2024,"Area_ha":50.2,"Yield_t_ha":4.51,"Production_t":226.402,"Osivo":2388,"Hnojiva":7196,"POR":3431,"Mechanizace":5341,"Najem":4158,"Pojisteni":724,"Ostatni":1458,"Cost_CZK_ha":24696,"Total_Cost":1239739.2,"Price_CZK_t":5469.54166666667,"Revenue":1238315.17241667,"GM_CZK":-1424.02758333343,"GM_CZK_ha":-28.3670833333353,"GM_Pct":-0.00114997184485298},{"HarvestID":"H-025","BlockID":"PB-03","CropID":"WHEAT","Year":2025,"Area_ha":48.7,"Yield_t_ha":4.9,"Production_t":238.63,"Osivo":2913,"Hnojiva":10332,"POR":5063,"Mechanizace":6945,"Najem":4312,"Pojisteni":903,"Ostatni":1621,"Cost_CZK_ha":32089,"Total_Cost":1562734.3,"Price_CZK_t":5220.51666666667,"Revenue":1245771.89216667,"GM_CZK":-316962.407833333,"GM_CZK_ha":-6508.46833333333,"GM_Pct":-0.254430534053925},{"HarvestID":"H-026","BlockID":"PB-03","CropID":"RAPE","Year":2025,"Area_ha":46.5,"Yield_t_ha":2.43,"Production_t":112.995,"Osivo":4529,"Hnojiva":13202,"POR":7470,"Mechanizace":7570,"Najem":4312,"Pojisteni":1096,"Ostatni":2089,"Cost_CZK_ha":40268,"Total_Cost":1872462,"Price_CZK_t":12392.9583333333,"Revenue":1400342.326875,"GM_CZK":-472119.673125,"GM_CZK_ha":-10153.11125,"GM_Pct":-0.337145899302052},{"HarvestID":"H-027","BlockID":"PB-03","CropID":"BARLEY","Year":2025,"Area_ha":50.8,"Yield_t_ha":4.11,"Production_t":208.788,"Osivo":2562,"Hnojiva":7462,"POR":3480,"Mechanizace":5678,"Najem":4312,"Pojisteni":753,"Ostatni":1497,"Cost_CZK_ha":25744,"Total_Cost":1307795.2,"Price_CZK_t":5301.41666666667,"Revenue":1106872.183,"GM_CZK":-200923.017,"GM_CZK_ha":-3955.1775,"GM_Pct":-0.181523232841059},{"HarvestID":"H-028","BlockID":"PB-04","CropID":"WHEAT","Year":2023,"Area_ha":29.1,"Yield_t_ha":7.9,"Production_t":229.89,"Osivo":2596,"Hnojiva":9450,"POR":4458,"Mechanizace":6072,"Najem":4069,"Pojisteni":772,"Ostatni":1564,"Cost_CZK_ha":28981,"Total_Cost":843347.1,"Price_CZK_t":5817.92166666667,"Revenue":1337482.01195,"GM_CZK":494134.91195,"GM_CZK_ha":16980.5811666667,"GM_Pct":0.369451631898637},{"HarvestID":"H-029","BlockID":"PB-04","CropID":"RAPE","Year":2023,"Area_ha":26.4,"Yield_t_ha":4.24,"Production_t":111.936,"Osivo":4353,"Hnojiva":12075,"POR":7124,"Mechanizace":6702,"Najem":4069,"Pojisteni":986,"Ostatni":1714,"Cost_CZK_ha":37023,"Total_Cost":977407.2,"Price_CZK_t":11324.6166666667,"Revenue":1267632.2912,"GM_CZK":290225.0912,"GM_CZK_ha":10993.3746666667,"GM_Pct":0.228950534957783},{"HarvestID":"H-030","BlockID":"PB-04","CropID":"BARLEY","Year":2023,"Area_ha":28.2,"Yield_t_ha":6.17,"Production_t":173.994,"Osivo":2252,"Hnojiva":6825,"POR":3146,"Mechanizace":5424,"Najem":4069,"Pojisteni":721,"Ostatni":1347,"Cost_CZK_ha":23784,"Total_Cost":670708.8,"Price_CZK_t":5682.95833333333,"Revenue":988800.65225,"GM_CZK":318091.85225,"GM_CZK_ha":11279.8529166667,"GM_Pct":0.321694622193247},{"HarvestID":"H-031","BlockID":"PB-04","CropID":"WHEAT","Year":2024,"Area_ha":28.1,"Yield_t_ha":7.3,"Production_t":205.13,"Osivo":2784,"Hnojiva":10206,"POR":4747,"Mechanizace":6666,"Najem":4394,"Pojisteni":830,"Ostatni":1680,"Cost_CZK_ha":31307,"Total_Cost":879726.7,"Price_CZK_t":5426.9875,"Revenue":1113237.945875,"GM_CZK":233511.245875,"GM_CZK_ha":8310.00875,"GM_Pct":0.209758611571097},{"HarvestID":"H-032","BlockID":"PB-04","CropID":"RAPE","Year":2024,"Area_ha":26.2,"Yield_t_ha":3.92,"Production_t":102.704,"Osivo":4699,"Hnojiva":13041,"POR":7140,"Mechanizace":7242,"Najem":4394,"Pojisteni":1022,"Ostatni":1906,"Cost_CZK_ha":39444,"Total_Cost":1033432.8,"Price_CZK_t":12398.1541666667,"Revenue":1273340.02553333,"GM_CZK":239907.225533333,"GM_CZK_ha":9156.76433333333,"GM_Pct":0.188407825657447},{"HarvestID":"H-033","BlockID":"PB-04","CropID":"BARLEY","Year":2024,"Area_ha":27.6,"Yield_t_ha":6.2,"Production_t":171.12,"Osivo":2446,"Hnojiva":7371,"POR":3362,"Mechanizace":5348,"Najem":4394,"Pojisteni":733,"Ostatni":1380,"Cost_CZK_ha":25034,"Total_Cost":690938.4,"Price_CZK_t":5469.54166666667,"Revenue":935947.97,"GM_CZK":245009.57,"GM_CZK_ha":8877.15833333334,"GM_Pct":0.261776912663211},{"HarvestID":"H-034","BlockID":"PB-04","CropID":"WHEAT","Year":2025,"Area_ha":29,"Yield_t_ha":6.8,"Production_t":197.2,"Osivo":2902,"Hnojiva":10584,"POR":5275,"Mechanizace":6572,"Najem":4557,"Pojisteni":909,"Ostatni":1663,"Cost_CZK_ha":32462,"Total_Cost":941398,"Price_CZK_t":5220.51666666667,"Revenue":1029485.88666667,"GM_CZK":88087.8866666666,"GM_CZK_ha":3037.51333333333,"GM_Pct":0.0855649288713253},{"HarvestID":"H-035","BlockID":"PB-04","CropID":"RAPE","Year":2025,"Area_ha":26,"Yield_t_ha":3.43,"Production_t":89.18,"Osivo":4930,"Hnojiva":13524,"POR":7644,"Mechanizace":7600,"Najem":4557,"Pojisteni":1023,"Ostatni":2111,"Cost_CZK_ha":41389,"Total_Cost":1076114,"Price_CZK_t":12392.9583333333,"Revenue":1105204.02416667,"GM_CZK":29090.0241666669,"GM_CZK_ha":1118.84708333334,"GM_Pct":0.0263209538968165},{"HarvestID":"H-036","BlockID":"PB-04","CropID":"BARLEY","Year":2025,"Area_ha":28,"Yield_t_ha":5.41,"Production_t":151.48,"Osivo":2385,"Hnojiva":7644,"POR":3750,"Mechanizace":5687,"Najem":4557,"Pojisteni":753,"Ostatni":1446,"Cost_CZK_ha":26222,"Total_Cost":734216,"Price_CZK_t":5301.41666666667,"Revenue":803058.596666667,"GM_CZK":68842.5966666668,"GM_CZK_ha":2458.66416666667,"GM_Pct":0.0857254961872252},{"HarvestID":"H-037","BlockID":"PB-05","CropID":"WHEAT","Year":2023,"Area_ha":39.1,"Yield_t_ha":7,"Production_t":273.7,"Osivo":2557,"Hnojiva":8550,"POR":4416,"Mechanizace":6064,"Najem":3938,"Pojisteni":801,"Ostatni":1483,"Cost_CZK_ha":27809,"Total_Cost":1087331.9,"Price_CZK_t":5817.92166666667,"Revenue":1592365.16016667,"GM_CZK":505033.260166666,"GM_CZK_ha":12916.4516666667,"GM_Pct":0.317159199912291},{"HarvestID":"H-038","BlockID":"PB-05","CropID":"RAPE","Year":2023,"Area_ha":40.1,"Yield_t_ha":3.83,"Production_t":153.583,"Osivo":4232,"Hnojiva":10925,"POR":6633,"Mechanizace":6636,"Najem":3938,"Pojisteni":903,"Ostatni":1877,"Cost_CZK_ha":35144,"Total_Cost":1409274.4,"Price_CZK_t":11324.6166666667,"Revenue":1739268.60151667,"GM_CZK":329994.201516666,"GM_CZK_ha":8229.28183333333,"GM_Pct":0.189731592480257},{"HarvestID":"H-039","BlockID":"PB-05","CropID":"BARLEY","Year":2023,"Area_ha":40.2,"Yield_t_ha":5.7,"Production_t":229.14,"Osivo":2208,"Hnojiva":6175,"POR":3270,"Mechanizace":5326,"Najem":3938,"Pojisteni":712,"Ostatni":1282,"Cost_CZK_ha":22911,"Total_Cost":921022.2,"Price_CZK_t":5682.95833333333,"Revenue":1302193.0725,"GM_CZK":381170.8725,"GM_CZK_ha":9481.8625,"GM_Pct":0.292714560190536},{"HarvestID":"H-040","BlockID":"PB-05","CropID":"WHEAT","Year":2024,"Area_ha":39.5,"Yield_t_ha":6.6,"Production_t":260.7,"Osivo":2584,"Hnojiva":9234,"POR":4940,"Mechanizace":6370,"Najem":4252,"Pojisteni":848,"Ostatni":1676,"Cost_CZK_ha":29904,"Total_Cost":1181208,"Price_CZK_t":5426.9875,"Revenue":1414815.64125,"GM_CZK":233607.64125,"GM_CZK_ha":5914.1175,"GM_Pct":0.165115252078784},{"HarvestID":"H-041","BlockID":"PB-05","CropID":"RAPE","Year":2024,"Area_ha":40,"Yield_t_ha":3.21,"Production_t":128.4,"Osivo":4636,"Hnojiva":11799,"POR":7197,"Mechanizace":6886,"Najem":4252,"Pojisteni":1017,"Ostatni":1925,"Cost_CZK_ha":37712,"Total_Cost":1508480,"Price_CZK_t":12398.1541666667,"Revenue":1591922.995,"GM_CZK":83442.9950000001,"GM_CZK_ha":2086.074875,"GM_Pct":0.0524164769665885},{"HarvestID":"H-042","BlockID":"PB-05","CropID":"BARLEY","Year":2024,"Area_ha":40.2,"Yield_t_ha":5.21,"Production_t":209.442,"Osivo":2327,"Hnojiva":6669,"POR":3327,"Mechanizace":5571,"Najem":4252,"Pojisteni":789,"Ostatni":1429,"Cost_CZK_ha":24364,"Total_Cost":979432.8,"Price_CZK_t":5469.54166666667,"Revenue":1145551.74575,"GM_CZK":166118.94575,"GM_CZK_ha":4132.31208333333,"GM_Pct":0.14501217109249},{"HarvestID":"H-043","BlockID":"PB-05","CropID":"WHEAT","Year":2025,"Area_ha":39,"Yield_t_ha":6,"Production_t":234,"Osivo":2913,"Hnojiva":9576,"POR":5098,"Mechanizace":6586,"Najem":4410,"Pojisteni":900,"Ostatni":1596,"Cost_CZK_ha":31079,"Total_Cost":1212081,"Price_CZK_t":5220.51666666667,"Revenue":1221600.9,"GM_CZK":9519.89999999991,"GM_CZK_ha":244.099999999998,"GM_Pct":0.0077929706829783},{"HarvestID":"H-044","BlockID":"PB-05","CropID":"RAPE","Year":2025,"Area_ha":39.1,"Yield_t_ha":3.24,"Production_t":126.684,"Osivo":4604,"Hnojiva":12236,"POR":7563,"Mechanizace":7338,"Najem":4410,"Pojisteni":1080,"Ostatni":2009,"Cost_CZK_ha":39240,"Total_Cost":1534284,"Price_CZK_t":12392.9583333333,"Revenue":1569989.5335,"GM_CZK":35705.5335000001,"GM_CZK_ha":913.185000000004,"GM_Pct":0.0227425296399278},{"HarvestID":"H-045","BlockID":"PB-05","CropID":"BARLEY","Year":2025,"Area_ha":39.4,"Yield_t_ha":5.04,"Production_t":198.576,"Osivo":2450,"Hnojiva":6916,"POR":3481,"Mechanizace":5808,"Najem":4410,"Pojisteni":815,"Ostatni":1499,"Cost_CZK_ha":25379,"Total_Cost":999932.6,"Price_CZK_t":5301.41666666667,"Revenue":1052734.116,"GM_CZK":52801.5159999999,"GM_CZK_ha":1340.14,"GM_Pct":0.0501565544400006},{"HarvestID":"H-046","BlockID":"PB-06","CropID":"WHEAT","Year":2023,"Area_ha":33.2,"Yield_t_ha":5.5,"Production_t":182.6,"Osivo":2417,"Hnojiva":8775,"POR":4313,"Mechanizace":6009,"Najem":3719,"Pojisteni":811,"Ostatni":1475,"Cost_CZK_ha":27519,"Total_Cost":913630.8,"Price_CZK_t":5817.92166666667,"Revenue":1062352.49633333,"GM_CZK":148721.696333333,"GM_CZK_ha":4479.56916666667,"GM_Pct":0.139992796032052},{"HarvestID":"H-047","BlockID":"PB-06","CropID":"RAPE","Year":2023,"Area_ha":30.3,"Yield_t_ha":2.95,"Production_t":89.385,"Osivo":4334,"Hnojiva":11212,"POR":6971,"Mechanizace":6612,"Najem":3719,"Pojisteni":924,"Ostatni":1746,"Cost_CZK_ha":35518,"Total_Cost":1076195.4,"Price_CZK_t":11324.6166666667,"Revenue":1012250.86075,"GM_CZK":-63944.53925,"GM_CZK_ha":-2110.38083333333,"GM_Pct":-0.0631706444809758},{"HarvestID":"H-048","BlockID":"PB-06","CropID":"BARLEY","Year":2023,"Area_ha":32.8,"Yield_t_ha":4.69,"Production_t":153.832,"Osivo":2095,"Hnojiva":6338,"POR":3118,"Mechanizace":5187,"Najem":3719,"Pojisteni":724,"Ostatni":1244,"Cost_CZK_ha":22425,"Total_Cost":735540,"Price_CZK_t":5682.95833333333,"Revenue":874220.846333333,"GM_CZK":138680.846333333,"GM_CZK_ha":4228.07458333334,"GM_Pct":0.158633652943636},{"HarvestID":"H-049","BlockID":"PB-06","CropID":"WHEAT","Year":2024,"Area_ha":32.5,"Yield_t_ha":5.1,"Production_t":165.75,"Osivo":2677,"Hnojiva":9477,"POR":4923,"Mechanizace":6282,"Najem":4016,"Pojisteni":881,"Ostatni":1619,"Cost_CZK_ha":29875,"Total_Cost":970937.5,"Price_CZK_t":5426.9875,"Revenue":899523.178125,"GM_CZK":-71414.321875,"GM_CZK_ha":-2197.36375,"GM_Pct":-0.0793913082082651},{"HarvestID":"H-050","BlockID":"PB-06","CropID":"RAPE","Year":2024,"Area_ha":31.4,"Yield_t_ha":2.64,"Production_t":82.896,"Osivo":4420,"Hnojiva":12110,"POR":7459,"Mechanizace":6673,"Najem":4016,"Pojisteni":1052,"Ostatni":1996,"Cost_CZK_ha":37726,"Total_Cost":1184596.4,"Price_CZK_t":12398.1541666667,"Revenue":1027757.3878,"GM_CZK":-156839.0122,"GM_CZK_ha":-4994.873,"GM_Pct":-0.152603147456548},{"HarvestID":"H-051","BlockID":"PB-06","CropID":"BARLEY","Year":2024,"Area_ha":32.1,"Yield_t_ha":4.47,"Production_t":143.487,"Osivo":2283,"Hnojiva":6845,"POR":3430,"Mechanizace":5434,"Najem":4016,"Pojisteni":791,"Ostatni":1407,"Cost_CZK_ha":24206,"Total_Cost":777012.6,"Price_CZK_t":5469.54166666667,"Revenue":784808.125125,"GM_CZK":7795.52512500004,"GM_CZK_ha":242.851250000001,"GM_Pct":0.00993303315222229},{"HarvestID":"H-052","BlockID":"PB-06","CropID":"WHEAT","Year":2025,"Area_ha":32.9,"Yield_t_ha":4.6,"Production_t":151.34,"Osivo":2674,"Hnojiva":9828,"POR":4914,"Mechanizace":6954,"Najem":4165,"Pojisteni":892,"Ostatni":1731,"Cost_CZK_ha":31158,"Total_Cost":1025098.2,"Price_CZK_t":5220.51666666667,"Revenue":790072.992333333,"GM_CZK":-235025.207666667,"GM_CZK_ha":-7143.62333333334,"GM_Pct":-0.297472777765208},{"HarvestID":"H-053","BlockID":"PB-06","CropID":"RAPE","Year":2025,"Area_ha":31.4,"Yield_t_ha":2.33,"Production_t":73.162,"Osivo":4783,"Hnojiva":12558,"POR":7988,"Mechanizace":7349,"Najem":4165,"Pojisteni":1112,"Ostatni":2095,"Cost_CZK_ha":40050,"Total_Cost":1257570,"Price_CZK_t":12392.9583333333,"Revenue":906693.617583333,"GM_CZK":-350876.382416667,"GM_CZK_ha":-11174.4070833333,"GM_Pct":-0.386984506797213},{"HarvestID":"H-054","BlockID":"PB-06","CropID":"BARLEY","Year":2025,"Area_ha":31.8,"Yield_t_ha":3.84,"Production_t":122.112,"Osivo":2492,"Hnojiva":7098,"POR":3663,"Mechanizace":5827,"Najem":4165,"Pojisteni":810,"Ostatni":1463,"Cost_CZK_ha":25518,"Total_Cost":811472.4,"Price_CZK_t":5301.41666666667,"Revenue":647366.592,"GM_CZK":-164105.808,"GM_CZK_ha":-5160.56,"GM_Pct":-0.253497492808526},{"HarvestID":"H-055","BlockID":"PB-07","CropID":"WHEAT","Year":2023,"Area_ha":47.1,"Yield_t_ha":7.6,"Production_t":357.96,"Osivo":2599,"Hnojiva":9000,"POR":4610,"Mechanizace":5985,"Najem":3981,"Pojisteni":781,"Ostatni":1462,"Cost_CZK_ha":28418,"Total_Cost":1338487.8,"Price_CZK_t":5817.92166666667,"Revenue":2082583.2398,"GM_CZK":744095.4398,"GM_CZK_ha":15798.2046666667,"GM_Pct":0.357294453148225},{"HarvestID":"H-056","BlockID":"PB-07","CropID":"RAPE","Year":2023,"Area_ha":45.9,"Yield_t_ha":4.09,"Production_t":187.731,"Osivo":4258,"Hnojiva":11500,"POR":6981,"Mechanizace":6514,"Najem":3981,"Pojisteni":962,"Ostatni":1759,"Cost_CZK_ha":35955,"Total_Cost":1650334.5,"Price_CZK_t":11324.6166666667,"Revenue":2125981.61145,"GM_CZK":475647.11145,"GM_CZK_ha":10362.6821666667,"GM_Pct":0.223730585856568},{"HarvestID":"H-057","BlockID":"PB-07","CropID":"BARLEY","Year":2023,"Area_ha":42.4,"Yield_t_ha":6.4,"Production_t":271.36,"Osivo":2107,"Hnojiva":6500,"POR":3131,"Mechanizace":5081,"Najem":3981,"Pojisteni":687,"Ostatni":1305,"Cost_CZK_ha":22792,"Total_Cost":966380.8,"Price_CZK_t":5682.95833333333,"Revenue":1542127.57333333,"GM_CZK":575746.773333333,"GM_CZK_ha":13578.9333333333,"GM_Pct":0.373345748619777},{"HarvestID":"H-058","BlockID":"PB-07","CropID":"WHEAT","Year":2024,"Area_ha":46.3,"Yield_t_ha":7.1,"Production_t":328.73,"Osivo":2602,"Hnojiva":9720,"POR":4729,"Mechanizace":6606,"Najem":4300,"Pojisteni":882,"Ostatni":1549,"Cost_CZK_ha":30388,"Total_Cost":1406964.4,"Price_CZK_t":5426.9875,"Revenue":1784013.600875,"GM_CZK":377049.200875,"GM_CZK_ha":8143.61125,"GM_Pct":0.211348837637824},{"HarvestID":"H-059","BlockID":"PB-07","CropID":"RAPE","Year":2024,"Area_ha":44.8,"Yield_t_ha":3.84,"Production_t":172.032,"Osivo":4494,"Hnojiva":12420,"POR":7375,"Mechanizace":6961,"Najem":4300,"Pojisteni":996,"Ostatni":1928,"Cost_CZK_ha":38474,"Total_Cost":1723635.2,"Price_CZK_t":12398.1541666667,"Revenue":2132879.2576,"GM_CZK":409244.0576,"GM_CZK_ha":9134.912,"GM_Pct":0.191873991995448},{"HarvestID":"H-060","BlockID":"PB-07","CropID":"BARLEY","Year":2024,"Area_ha":41.9,"Yield_t_ha":5.95,"Production_t":249.305,"Osivo":2472,"Hnojiva":7020,"POR":3485,"Mechanizace":5726,"Najem":4300,"Pojisteni":783,"Ostatni":1441,"Cost_CZK_ha":25227,"Total_Cost":1057011.3,"Price_CZK_t":5469.54166666667,"Revenue":1363584.08520833,"GM_CZK":306572.785208333,"GM_CZK_ha":7316.77291666667,"GM_Pct":0.224828661858058},{"HarvestID":"H-061","BlockID":"PB-07","CropID":"WHEAT","Year":2025,"Area_ha":47.6,"Yield_t_ha":6.5,"Production_t":309.4,"Osivo":2767,"Hnojiva":10080,"POR":4791,"Mechanizace":6620,"Najem":4459,"Pojisteni":919,"Ostatni":1739,"Cost_CZK_ha":31375,"Total_Cost":1493450,"Price_CZK_t":5220.51666666667,"Revenue":1615227.85666667,"GM_CZK":121777.856666667,"GM_CZK_ha":2558.35833333333,"GM_Pct":0.0753936085017619},{"HarvestID":"H-062","BlockID":"PB-07","CropID":"RAPE","Year":2025,"Area_ha":45.4,"Yield_t_ha":3.44,"Production_t":156.176,"Osivo":4917,"Hnojiva":12880,"POR":7554,"Mechanizace":7460,"Najem":4459,"Pojisteni":1069,"Ostatni":2037,"Cost_CZK_ha":40376,"Total_Cost":1833070.4,"Price_CZK_t":12392.9583333333,"Revenue":1935482.66066667,"GM_CZK":102412.260666667,"GM_CZK_ha":2255.77666666667,"GM_Pct":0.0529130344321408},{"HarvestID":"H-063","BlockID":"PB-07","CropID":"BARLEY","Year":2025,"Area_ha":42.9,"Yield_t_ha":5.1,"Production_t":218.79,"Osivo":2395,"Hnojiva":7280,"POR":3483,"Mechanizace":5787,"Najem":4459,"Pojisteni":747,"Ostatni":1432,"Cost_CZK_ha":25583,"Total_Cost":1097510.7,"Price_CZK_t":5301.41666666667,"Revenue":1159896.9525,"GM_CZK":62386.2524999999,"GM_CZK_ha":1454.225,"GM_Pct":0.05378603018616},{"HarvestID":"H-064","BlockID":"PB-08","CropID":"WHEAT","Year":2023,"Area_ha":34.1,"Yield_t_ha":6.5,"Production_t":221.65,"Osivo":2545,"Hnojiva":9225,"POR":4457,"Mechanizace":5799,"Najem":3894,"Pojisteni":797,"Ostatni":1444,"Cost_CZK_ha":28161,"Total_Cost":960290.1,"Price_CZK_t":5817.92166666667,"Revenue":1289542.33741667,"GM_CZK":329252.237416666,"GM_CZK_ha":9655.49083333333,"GM_Pct":0.255324876014739},{"HarvestID":"H-065","BlockID":"PB-08","CropID":"RAPE","Year":2023,"Area_ha":31.8,"Yield_t_ha":3.22,"Production_t":102.396,"Osivo":4251,"Hnojiva":11787,"POR":6478,"Mechanizace":6431,"Najem":3894,"Pojisteni":956,"Ostatni":1715,"Cost_CZK_ha":35512,"Total_Cost":1129281.6,"Price_CZK_t":11324.6166666667,"Revenue":1159595.4482,"GM_CZK":30313.8482000001,"GM_CZK_ha":953.265666666671,"GM_Pct":0.0261417447326611},{"HarvestID":"H-066","BlockID":"PB-08","CropID":"BARLEY","Year":2023,"Area_ha":33.1,"Yield_t_ha":5.26,"Production_t":174.106,"Osivo":2231,"Hnojiva":6662,"POR":3083,"Mechanizace":5180,"Najem":3894,"Pojisteni":669,"Ostatni":1284,"Cost_CZK_ha":23003,"Total_Cost":761399.3,"Price_CZK_t":5682.95833333333,"Revenue":989437.143583333,"GM_CZK":228037.843583333,"GM_CZK_ha":6889.36083333333,"GM_Pct":0.230472289283051},{"HarvestID":"H-067","BlockID":"PB-08","CropID":"WHEAT","Year":2024,"Area_ha":33.4,"Yield_t_ha":6.1,"Production_t":203.74,"Osivo":2622,"Hnojiva":9963,"POR":4776,"Mechanizace":6649,"Najem":4205,"Pojisteni":854,"Ostatni":1661,"Cost_CZK_ha":30730,"Total_Cost":1026382,"Price_CZK_t":5426.9875,"Revenue":1105694.43325,"GM_CZK":79312.43325,"GM_CZK_ha":2374.62375,"GM_Pct":0.0717308786812597},{"HarvestID":"H-068","BlockID":"PB-08","CropID":"RAPE","Year":2024,"Area_ha":31.4,"Yield_t_ha":2.96,"Production_t":92.944,"Osivo":4687,"Hnojiva":12730,"POR":7162,"Mechanizace":6726,"Najem":4205,"Pojisteni":977,"Ostatni":1952,"Cost_CZK_ha":38439,"Total_Cost":1206984.6,"Price_CZK_t":12398.1541666667,"Revenue":1152334.04086667,"GM_CZK":-54650.5591333334,"GM_CZK_ha":-1740.46366666667,"GM_Pct":-0.0474259695497938},{"HarvestID":"H-069","BlockID":"PB-08","CropID":"BARLEY","Year":2024,"Area_ha":32.6,"Yield_t_ha":4.9,"Production_t":159.74,"Osivo":2495,"Hnojiva":7196,"POR":3404,"Mechanizace":5700,"Najem":4205,"Pojisteni":777,"Ostatni":1425,"Cost_CZK_ha":25202,"Total_Cost":821585.2,"Price_CZK_t":5469.54166666667,"Revenue":873704.585833333,"GM_CZK":52119.3858333334,"GM_CZK_ha":1598.75416666667,"GM_Pct":0.0596533275416224},{"HarvestID":"H-070","BlockID":"PB-08","CropID":"WHEAT","Year":2025,"Area_ha":33.5,"Yield_t_ha":5.7,"Production_t":190.95,"Osivo":2871,"Hnojiva":10332,"POR":5267,"Mechanizace":6518,"Najem":4361,"Pojisteni":853,"Ostatni":1622,"Cost_CZK_ha":31824,"Total_Cost":1066104,"Price_CZK_t":5220.51666666667,"Revenue":996857.6575,"GM_CZK":-69246.3424999999,"GM_CZK_ha":-2067.055,"GM_Pct":-0.0694646241406837},{"HarvestID":"H-071","BlockID":"PB-08","CropID":"RAPE","Year":2025,"Area_ha":31.1,"Yield_t_ha":2.78,"Production_t":86.458,"Osivo":4528,"Hnojiva":13202,"POR":7745,"Mechanizace":7327,"Najem":4361,"Pojisteni":1034,"Ostatni":2056,"Cost_CZK_ha":40253,"Total_Cost":1251868.3,"Price_CZK_t":12392.9583333333,"Revenue":1071470.39158333,"GM_CZK":-180397.908416667,"GM_CZK_ha":-5800.57583333334,"GM_Pct":-0.168364809549323},{"HarvestID":"H-072","BlockID":"PB-08","CropID":"BARLEY","Year":2025,"Area_ha":32.7,"Yield_t_ha":4.6,"Production_t":150.42,"Osivo":2530,"Hnojiva":7462,"POR":3465,"Mechanizace":5886,"Najem":4361,"Pojisteni":803,"Ostatni":1400,"Cost_CZK_ha":25907,"Total_Cost":847158.9,"Price_CZK_t":5301.41666666667,"Revenue":797439.095,"GM_CZK":-49719.8050000001,"GM_CZK_ha":-1520.48333333333,"GM_Pct":-0.0623493446856905},{"HarvestID":"H-073","BlockID":"PB-09","CropID":"WHEAT","Year":2023,"Area_ha":52.3,"Yield_t_ha":6.9,"Production_t":360.87,"Osivo":2580,"Hnojiva":9450,"POR":4709,"Mechanizace":5765,"Najem":3806,"Pojisteni":762,"Ostatni":1472,"Cost_CZK_ha":28544,"Total_Cost":1492851.2,"Price_CZK_t":5817.92166666667,"Revenue":2099513.39185,"GM_CZK":606662.19185,"GM_CZK_ha":11599.6595,"GM_Pct":0.288953713848634},{"HarvestID":"H-074","BlockID":"PB-09","CropID":"RAPE","Year":2023,"Area_ha":50.8,"Yield_t_ha":3.62,"Production_t":183.896,"Osivo":4274,"Hnojiva":12075,"POR":7112,"Mechanizace":6433,"Najem":3806,"Pojisteni":970,"Ostatni":1724,"Cost_CZK_ha":36394,"Total_Cost":1848815.2,"Price_CZK_t":11324.6166666667,"Revenue":2082551.70653333,"GM_CZK":233736.506533333,"GM_CZK_ha":4601.11233333333,"GM_Pct":0.112235631797309},{"HarvestID":"H-075","BlockID":"PB-09","CropID":"BARLEY","Year":2023,"Area_ha":49.6,"Yield_t_ha":5.63,"Production_t":279.248,"Osivo":2242,"Hnojiva":6825,"POR":3241,"Mechanizace":4993,"Najem":3806,"Pojisteni":719,"Ostatni":1346,"Cost_CZK_ha":23172,"Total_Cost":1149331.2,"Price_CZK_t":5682.95833333333,"Revenue":1586954.74866667,"GM_CZK":437623.548666667,"GM_CZK_ha":8823.05541666666,"GM_Pct":0.275763092195509},{"HarvestID":"H-076","BlockID":"PB-09","CropID":"WHEAT","Year":2024,"Area_ha":52,"Yield_t_ha":6.5,"Production_t":338,"Osivo":2727,"Hnojiva":10206,"POR":4676,"Mechanizace":6794,"Najem":4111,"Pojisteni":888,"Ostatni":1595,"Cost_CZK_ha":30997,"Total_Cost":1611844,"Price_CZK_t":5426.9875,"Revenue":1834321.775,"GM_CZK":222477.775,"GM_CZK_ha":4278.41875,"GM_Pct":0.121286122223567},{"HarvestID":"H-077","BlockID":"PB-09","CropID":"RAPE","Year":2024,"Area_ha":52.2,"Yield_t_ha":3.29,"Production_t":171.738,"Osivo":4504,"Hnojiva":13041,"POR":7249,"Mechanizace":7024,"Najem":4111,"Pojisteni":1010,"Ostatni":2012,"Cost_CZK_ha":38951,"Total_Cost":2033242.2,"Price_CZK_t":12398.1541666667,"Revenue":2129234.200275,"GM_CZK":95992.000275,"GM_CZK_ha":1838.92720833333,"GM_Pct":0.0450828754594503},{"HarvestID":"H-078","BlockID":"PB-09","CropID":"BARLEY","Year":2024,"Area_ha":49.9,"Yield_t_ha":5.21,"Production_t":259.979,"Osivo":2453,"Hnojiva":7371,"POR":3320,"Mechanizace":5875,"Najem":4111,"Pojisteni":766,"Ostatni":1450,"Cost_CZK_ha":25346,"Total_Cost":1264765.4,"Price_CZK_t":5469.54166666667,"Revenue":1421965.97295833,"GM_CZK":157200.572958333,"GM_CZK_ha":3150.31208333334,"GM_Pct":0.110551571519876},{"HarvestID":"H-079","BlockID":"PB-09","CropID":"WHEAT","Year":2025,"Area_ha":53.2,"Yield_t_ha":5.9,"Production_t":313.88,"Osivo":2858,"Hnojiva":10584,"POR":5007,"Mechanizace":6877,"Najem":4263,"Pojisteni":938,"Ostatni":1641,"Cost_CZK_ha":32168,"Total_Cost":1711337.6,"Price_CZK_t":5220.51666666667,"Revenue":1638615.77133333,"GM_CZK":-72721.8286666665,"GM_CZK_ha":-1366.95166666666,"GM_Pct":-0.0443800370647557},{"HarvestID":"H-080","BlockID":"PB-09","CropID":"RAPE","Year":2025,"Area_ha":52.1,"Yield_t_ha":2.94,"Production_t":153.174,"Osivo":4849,"Hnojiva":13524,"POR":7645,"Mechanizace":7268,"Najem":4263,"Pojisteni":1057,"Ostatni":2063,"Cost_CZK_ha":40669,"Total_Cost":2118854.9,"Price_CZK_t":12392.9583333333,"Revenue":1898278.99975,"GM_CZK":-220575.90025,"GM_CZK_ha":-4233.70249999999,"GM_Pct":-0.116197829865393},{"HarvestID":"H-081","BlockID":"PB-09","CropID":"BARLEY","Year":2025,"Area_ha":50.8,"Yield_t_ha":5.15,"Production_t":261.62,"Osivo":2407,"Hnojiva":7644,"POR":3710,"Mechanizace":6017,"Najem":4263,"Pojisteni":752,"Ostatni":1512,"Cost_CZK_ha":26305,"Total_Cost":1336294,"Price_CZK_t":5301.41666666667,"Revenue":1386956.62833333,"GM_CZK":50662.6283333334,"GM_CZK_ha":997.295833333335,"GM_Pct":0.0365279110380065},{"HarvestID":"H-082","BlockID":"PB-10","CropID":"WHEAT","Year":2023,"Area_ha":28.4,"Yield_t_ha":5.2,"Production_t":147.68,"Osivo":2436,"Hnojiva":8550,"POR":4484,"Mechanizace":6066,"Najem":3587,"Pojisteni":790,"Ostatni":1429,"Cost_CZK_ha":27342,"Total_Cost":776512.8,"Price_CZK_t":5817.92166666667,"Revenue":859190.671733333,"GM_CZK":82677.8717333333,"GM_CZK_ha":2911.19266666667,"GM_Pct":0.0962276179820933},{"HarvestID":"H-083","BlockID":"PB-10","CropID":"RAPE","Year":2023,"Area_ha":26.7,"Yield_t_ha":2.73,"Production_t":72.891,"Osivo":4347,"Hnojiva":10925,"POR":6584,"Mechanizace":6313,"Najem":3587,"Pojisteni":978,"Ostatni":1771,"Cost_CZK_ha":34505,"Total_Cost":921283.5,"Price_CZK_t":11324.6166666667,"Revenue":825462.63345,"GM_CZK":-95820.86655,"GM_CZK_ha":-3588.7965,"GM_Pct":-0.116081410189967},{"HarvestID":"H-084","BlockID":"PB-10","CropID":"BARLEY","Year":2023,"Area_ha":29.3,"Yield_t_ha":4.37,"Production_t":128.041,"Osivo":2284,"Hnojiva":6175,"POR":3264,"Mechanizace":5084,"Najem":3587,"Pojisteni":666,"Ostatni":1358,"Cost_CZK_ha":22418,"Total_Cost":656847.4,"Price_CZK_t":5682.95833333333,"Revenue":727651.667958333,"GM_CZK":70804.2679583333,"GM_CZK_ha":2416.52791666666,"GM_Pct":0.0973051682228641},{"HarvestID":"H-085","BlockID":"PB-10","CropID":"WHEAT","Year":2024,"Area_ha":28.3,"Yield_t_ha":4.9,"Production_t":138.67,"Osivo":2588,"Hnojiva":9234,"POR":4967,"Mechanizace":6473,"Najem":3874,"Pojisteni":886,"Ostatni":1651,"Cost_CZK_ha":29673,"Total_Cost":839745.9,"Price_CZK_t":5426.9875,"Revenue":752560.356625,"GM_CZK":-87185.5433749999,"GM_CZK_ha":-3080.76125,"GM_Pct":-0.115851894944347},{"HarvestID":"H-086","BlockID":"PB-10","CropID":"RAPE","Year":2024,"Area_ha":26,"Yield_t_ha":2.41,"Production_t":62.66,"Osivo":4602,"Hnojiva":11799,"POR":7337,"Mechanizace":7226,"Najem":3874,"Pojisteni":984,"Ostatni":1890,"Cost_CZK_ha":37712,"Total_Cost":980512,"Price_CZK_t":12398.1541666667,"Revenue":776868.340083333,"GM_CZK":-203643.659916667,"GM_CZK_ha":-7832.44845833333,"GM_Pct":-0.262134070098444},{"HarvestID":"H-087","BlockID":"PB-10","CropID":"BARLEY","Year":2024,"Area_ha":29.3,"Yield_t_ha":4.18,"Production_t":122.474,"Osivo":2422,"Hnojiva":6669,"POR":3389,"Mechanizace":5662,"Najem":3874,"Pojisteni":754,"Ostatni":1408,"Cost_CZK_ha":24178,"Total_Cost":708415.4,"Price_CZK_t":5469.54166666667,"Revenue":669876.646083333,"GM_CZK":-38538.7539166667,"GM_CZK_ha":-1315.31583333334,"GM_Pct":-0.0575311203069953},{"HarvestID":"H-088","BlockID":"PB-10","CropID":"WHEAT","Year":2025,"Area_ha":28.6,"Yield_t_ha":4.4,"Production_t":125.84,"Osivo":2779,"Hnojiva":9576,"POR":5164,"Mechanizace":6606,"Najem":4018,"Pojisteni":914,"Ostatni":1642,"Cost_CZK_ha":30699,"Total_Cost":877991.4,"Price_CZK_t":5220.51666666667,"Revenue":656949.817333333,"GM_CZK":-221041.582666667,"GM_CZK_ha":-7728.72666666666,"GM_Pct":-0.336466464917991},{"HarvestID":"H-089","BlockID":"PB-10","CropID":"RAPE","Year":2025,"Area_ha":25.9,"Yield_t_ha":2.16,"Production_t":55.944,"Osivo":4587,"Hnojiva":12236,"POR":7327,"Mechanizace":7056,"Najem":4018,"Pojisteni":1024,"Ostatni":2023,"Cost_CZK_ha":38271,"Total_Cost":991218.9,"Price_CZK_t":12392.9583333333,"Revenue":693311.661,"GM_CZK":-297907.239,"GM_CZK_ha":-11502.21,"GM_Pct":-0.42968733364489},{"HarvestID":"H-090","BlockID":"PB-10","CropID":"BARLEY","Year":2025,"Area_ha":29.4,"Yield_t_ha":3.6,"Production_t":105.84,"Osivo":2529,"Hnojiva":6916,"POR":3471,"Mechanizace":5659,"Najem":4018,"Pojisteni":783,"Ostatni":1489,"Cost_CZK_ha":24865,"Total_Cost":731031,"Price_CZK_t":5301.41666666667,"Revenue":561101.94,"GM_CZK":-169929.06,"GM_CZK_ha":-5779.9,"GM_Pct":-0.302848819235948}],"prices_monthly":[{"Year":2023,"Month":1,"CropID":"WHEAT","Price_EUR":295,"EURCZK":23.78,"Price_CZK":7015.1},{"Year":2023,"Month":2,"CropID":"WHEAT","Price_EUR":275,"EURCZK":23.72,"Price_CZK":6523},{"Year":2023,"Month":3,"CropID":"WHEAT","Price_EUR":260,"EURCZK":23.65,"Price_CZK":6149},{"Year":2023,"Month":4,"CropID":"WHEAT","Price_EUR":245,"EURCZK":23.47,"Price_CZK":5750.15},{"Year":2023,"Month":5,"CropID":"WHEAT","Price_EUR":230,"EURCZK":23.58,"Price_CZK":5423.4},{"Year":2023,"Month":6,"CropID":"WHEAT","Price_EUR":232,"EURCZK":23.71,"Price_CZK":5500.72},{"Year":2023,"Month":7,"CropID":"WHEAT","Price_EUR":240,"EURCZK":24,"Price_CZK":5760},{"Year":2023,"Month":8,"CropID":"WHEAT","Price_EUR":235,"EURCZK":24.15,"Price_CZK":5675.25},{"Year":2023,"Month":9,"CropID":"WHEAT","Price_EUR":230,"EURCZK":24.34,"Price_CZK":5598.2},{"Year":2023,"Month":10,"CropID":"WHEAT","Price_EUR":228,"EURCZK":24.62,"Price_CZK":5613.36},{"Year":2023,"Month":11,"CropID":"WHEAT","Price_EUR":225,"EURCZK":24.38,"Price_CZK":5485.5},{"Year":2023,"Month":12,"CropID":"WHEAT","Price_EUR":218,"EURCZK":24.41,"Price_CZK":5321.38},{"Year":2024,"Month":1,"CropID":"WHEAT","Price_EUR":215,"EURCZK":24.73,"Price_CZK":5316.95},{"Year":2024,"Month":2,"CropID":"WHEAT","Price_EUR":210,"EURCZK":25.25,"Price_CZK":5302.5},{"Year":2024,"Month":3,"CropID":"WHEAT","Price_EUR":205,"EURCZK":25.33,"Price_CZK":5192.65},{"Year":2024,"Month":4,"CropID":"WHEAT","Price_EUR":200,"EURCZK":25.3,"Price_CZK":5060},{"Year":2024,"Month":5,"CropID":"WHEAT","Price_EUR":230,"EURCZK":24.93,"Price_CZK":5733.9},{"Year":2024,"Month":6,"CropID":"WHEAT","Price_EUR":225,"EURCZK":24.76,"Price_CZK":5571},{"Year":2024,"Month":7,"CropID":"WHEAT","Price_EUR":220,"EURCZK":25.3,"Price_CZK":5566},{"Year":2024,"Month":8,"CropID":"WHEAT","Price_EUR":210,"EURCZK":25.18,"Price_CZK":5287.8},{"Year":2024,"Month":9,"CropID":"WHEAT","Price_EUR":215,"EURCZK":25.18,"Price_CZK":5413.7},{"Year":2024,"Month":10,"CropID":"WHEAT","Price_EUR":215,"EURCZK":25.35,"Price_CZK":5450.25},{"Year":2024,"Month":11,"CropID":"WHEAT","Price_EUR":220,"EURCZK":25.33,"Price_CZK":5572.6},{"Year":2024,"Month":12,"CropID":"WHEAT","Price_EUR":225,"EURCZK":25.14,"Price_CZK":5656.5},{"Year":2025,"Month":1,"CropID":"WHEAT","Price_EUR":230,"EURCZK":25.17,"Price_CZK":5789.1},{"Year":2025,"Month":2,"CropID":"WHEAT","Price_EUR":235,"EURCZK":25.06,"Price_CZK":5889.1},{"Year":2025,"Month":3,"CropID":"WHEAT","Price_EUR":225,"EURCZK":25.07,"Price_CZK":5640.75},{"Year":2025,"Month":4,"CropID":"WHEAT","Price_EUR":220,"EURCZK":24.97,"Price_CZK":5493.4},{"Year":2025,"Month":5,"CropID":"WHEAT","Price_EUR":215,"EURCZK":24.85,"Price_CZK":5342.75},{"Year":2025,"Month":6,"CropID":"WHEAT","Price_EUR":205,"EURCZK":24.71,"Price_CZK":5065.55},{"Year":2025,"Month":7,"CropID":"WHEAT","Price_EUR":200,"EURCZK":24.58,"Price_CZK":4916},{"Year":2025,"Month":8,"CropID":"WHEAT","Price_EUR":195,"EURCZK":24.52,"Price_CZK":4781.4},{"Year":2025,"Month":9,"CropID":"WHEAT","Price_EUR":195,"EURCZK":24.45,"Price_CZK":4767.75},{"Year":2025,"Month":10,"CropID":"WHEAT","Price_EUR":200,"EURCZK":24.38,"Price_CZK":4876},{"Year":2025,"Month":11,"CropID":"WHEAT","Price_EUR":205,"EURCZK":24.32,"Price_CZK":4985.6},{"Year":2025,"Month":12,"CropID":"WHEAT","Price_EUR":210,"EURCZK":24.28,"Price_CZK":5098.8},{"Year":2023,"Month":1,"CropID":"RAPE","Price_EUR":605,"EURCZK":23.78,"Price_CZK":14386.9},{"Year":2023,"Month":2,"CropID":"RAPE","Price_EUR":555,"EURCZK":23.72,"Price_CZK":13164.6},{"Year":2023,"Month":3,"CropID":"RAPE","Price_EUR":500,"EURCZK":23.65,"Price_CZK":11825},{"Year":2023,"Month":4,"CropID":"RAPE","Price_EUR":470,"EURCZK":23.47,"Price_CZK":11030.9},{"Year":2023,"Month":5,"CropID":"RAPE","Price_EUR":430,"EURCZK":23.58,"Price_CZK":10139.4},{"Year":2023,"Month":6,"CropID":"RAPE","Price_EUR":440,"EURCZK":23.71,"Price_CZK":10432.4},{"Year":2023,"Month":7,"CropID":"RAPE","Price_EUR":450,"EURCZK":24,"Price_CZK":10800},{"Year":2023,"Month":8,"CropID":"RAPE","Price_EUR":465,"EURCZK":24.15,"Price_CZK":11229.75},{"Year":2023,"Month":9,"CropID":"RAPE","Price_EUR":470,"EURCZK":24.34,"Price_CZK":11439.8},{"Year":2023,"Month":10,"CropID":"RAPE","Price_EUR":440,"EURCZK":24.62,"Price_CZK":10832.8},{"Year":2023,"Month":11,"CropID":"RAPE","Price_EUR":420,"EURCZK":24.38,"Price_CZK":10239.6},{"Year":2023,"Month":12,"CropID":"RAPE","Price_EUR":425,"EURCZK":24.41,"Price_CZK":10374.25},{"Year":2024,"Month":1,"CropID":"RAPE","Price_EUR":430,"EURCZK":24.73,"Price_CZK":10633.9},{"Year":2024,"Month":2,"CropID":"RAPE","Price_EUR":440,"EURCZK":25.25,"Price_CZK":11110},{"Year":2024,"Month":3,"CropID":"RAPE","Price_EUR":445,"EURCZK":25.33,"Price_CZK":11271.85},{"Year":2024,"Month":4,"CropID":"RAPE","Price_EUR":480,"EURCZK":25.3,"Price_CZK":12144},{"Year":2024,"Month":5,"CropID":"RAPE","Price_EUR":495,"EURCZK":24.93,"Price_CZK":12340.35},{"Year":2024,"Month":6,"CropID":"RAPE","Price_EUR":500,"EURCZK":24.76,"Price_CZK":12380},{"Year":2024,"Month":7,"CropID":"RAPE","Price_EUR":515,"EURCZK":25.3,"Price_CZK":13029.5},{"Year":2024,"Month":8,"CropID":"RAPE","Price_EUR":510,"EURCZK":25.18,"Price_CZK":12841.8},{"Year":2024,"Month":9,"CropID":"RAPE","Price_EUR":490,"EURCZK":25.18,"Price_CZK":12338.2},{"Year":2024,"Month":10,"CropID":"RAPE","Price_EUR":525,"EURCZK":25.35,"Price_CZK":13308.75},{"Year":2024,"Month":11,"CropID":"RAPE","Price_EUR":540,"EURCZK":25.33,"Price_CZK":13678.2},{"Year":2024,"Month":12,"CropID":"RAPE","Price_EUR":545,"EURCZK":25.14,"Price_CZK":13701.3},{"Year":2025,"Month":1,"CropID":"RAPE","Price_EUR":535,"EURCZK":25.17,"Price_CZK":13465.95},{"Year":2025,"Month":2,"CropID":"RAPE","Price_EUR":540,"EURCZK":25.06,"Price_CZK":13532.4},{"Year":2025,"Month":3,"CropID":"RAPE","Price_EUR":510,"EURCZK":25.07,"Price_CZK":12785.7},{"Year":2025,"Month":4,"CropID":"RAPE","Price_EUR":505,"EURCZK":24.97,"Price_CZK":12609.85},{"Year":2025,"Month":5,"CropID":"RAPE","Price_EUR":495,"EURCZK":24.85,"Price_CZK":12300.75},{"Year":2025,"Month":6,"CropID":"RAPE","Price_EUR":485,"EURCZK":24.71,"Price_CZK":11984.35},{"Year":2025,"Month":7,"CropID":"RAPE","Price_EUR":475,"EURCZK":24.58,"Price_CZK":11675.5},{"Year":2025,"Month":8,"CropID":"RAPE","Price_EUR":480,"EURCZK":24.52,"Price_CZK":11769.6},{"Year":2025,"Month":9,"CropID":"RAPE","Price_EUR":490,"EURCZK":24.45,"Price_CZK":11980.5},{"Year":2025,"Month":10,"CropID":"RAPE","Price_EUR":495,"EURCZK":24.38,"Price_CZK":12068.1},{"Year":2025,"Month":11,"CropID":"RAPE","Price_EUR":500,"EURCZK":24.32,"Price_CZK":12160},{"Year":2025,"Month":12,"CropID":"RAPE","Price_EUR":510,"EURCZK":24.28,"Price_CZK":12382.8},{"Year":2023,"Month":1,"CropID":"BARLEY","Price_EUR":275,"EURCZK":23.78,"Price_CZK":6539.5},{"Year":2023,"Month":2,"CropID":"BARLEY","Price_EUR":260,"EURCZK":23.72,"Price_CZK":6167.2},{"Year":2023,"Month":3,"CropID":"BARLEY","Price_EUR":250,"EURCZK":23.65,"Price_CZK":5912.5},{"Year":2023,"Month":4,"CropID":"BARLEY","Price_EUR":240,"EURCZK":23.47,"Price_CZK":5632.8},{"Year":2023,"Month":5,"CropID":"BARLEY","Price_EUR":225,"EURCZK":23.58,"Price_CZK":5305.5},{"Year":2023,"Month":6,"CropID":"BARLEY","Price_EUR":230,"EURCZK":23.71,"Price_CZK":5453.3},{"Year":2023,"Month":7,"CropID":"BARLEY","Price_EUR":240,"EURCZK":24,"Price_CZK":5760},{"Year":2023,"Month":8,"CropID":"BARLEY","Price_EUR":235,"EURCZK":24.15,"Price_CZK":5675.25},{"Year":2023,"Month":9,"CropID":"BARLEY","Price_EUR":230,"EURCZK":24.34,"Price_CZK":5598.2},{"Year":2023,"Month":10,"CropID":"BARLEY","Price_EUR":225,"EURCZK":24.62,"Price_CZK":5539.5},{"Year":2023,"Month":11,"CropID":"BARLEY","Price_EUR":220,"EURCZK":24.38,"Price_CZK":5363.6},{"Year":2023,"Month":12,"CropID":"BARLEY","Price_EUR":215,"EURCZK":24.41,"Price_CZK":5248.15},{"Year":2024,"Month":1,"CropID":"BARLEY","Price_EUR":210,"EURCZK":24.73,"Price_CZK":5193.3},{"Year":2024,"Month":2,"CropID":"BARLEY","Price_EUR":205,"EURCZK":25.25,"Price_CZK":5176.25},{"Year":2024,"Month":3,"CropID":"BARLEY","Price_EUR":200,"EURCZK":25.33,"Price_CZK":5066},{"Year":2024,"Month":4,"CropID":"BARLEY","Price_EUR":205,"EURCZK":25.3,"Price_CZK":5186.5},{"Year":2024,"Month":5,"CropID":"BARLEY","Price_EUR":220,"EURCZK":24.93,"Price_CZK":5484.6},{"Year":2024,"Month":6,"CropID":"BARLEY","Price_EUR":225,"EURCZK":24.76,"Price_CZK":5571},{"Year":2024,"Month":7,"CropID":"BARLEY","Price_EUR":230,"EURCZK":25.3,"Price_CZK":5819},{"Year":2024,"Month":8,"CropID":"BARLEY","Price_EUR":225,"EURCZK":25.18,"Price_CZK":5665.5},{"Year":2024,"Month":9,"CropID":"BARLEY","Price_EUR":220,"EURCZK":25.18,"Price_CZK":5539.6},{"Year":2024,"Month":10,"CropID":"BARLEY","Price_EUR":220,"EURCZK":25.35,"Price_CZK":5577},{"Year":2024,"Month":11,"CropID":"BARLEY","Price_EUR":225,"EURCZK":25.33,"Price_CZK":5699.25},{"Year":2024,"Month":12,"CropID":"BARLEY","Price_EUR":225,"EURCZK":25.14,"Price_CZK":5656.5},{"Year":2025,"Month":1,"CropID":"BARLEY","Price_EUR":225,"EURCZK":25.17,"Price_CZK":5663.25},{"Year":2025,"Month":2,"CropID":"BARLEY","Price_EUR":230,"EURCZK":25.06,"Price_CZK":5763.8},{"Year":2025,"Month":3,"CropID":"BARLEY","Price_EUR":225,"EURCZK":25.07,"Price_CZK":5640.75},{"Year":2025,"Month":4,"CropID":"BARLEY","Price_EUR":220,"EURCZK":24.97,"Price_CZK":5493.4},{"Year":2025,"Month":5,"CropID":"BARLEY","Price_EUR":215,"EURCZK":24.85,"Price_CZK":5342.75},{"Year":2025,"Month":6,"CropID":"BARLEY","Price_EUR":210,"EURCZK":24.71,"Price_CZK":5189.1},{"Year":2025,"Month":7,"CropID":"BARLEY","Price_EUR":205,"EURCZK":24.58,"Price_CZK":5038.9},{"Year":2025,"Month":8,"CropID":"BARLEY","Price_EUR":200,"EURCZK":24.52,"Price_CZK":4904},{"Year":2025,"Month":9,"CropID":"BARLEY","Price_EUR":205,"EURCZK":24.45,"Price_CZK":5012.25},{"Year":2025,"Month":10,"CropID":"BARLEY","Price_EUR":210,"EURCZK":24.38,"Price_CZK":5119.8},{"Year":2025,"Month":11,"CropID":"BARLEY","Price_EUR":215,"EURCZK":24.32,"Price_CZK":5228.8},{"Year":2025,"Month":12,"CropID":"BARLEY","Price_EUR":215,"EURCZK":24.28,"Price_CZK":5220.2}],"prices_annual":[{"Year":2023,"CropID":"WHEAT","Avg_MATIF_EUR":242.75,"Avg_EURCZK":23.9841666666667,"Avg_Price_CZK_t":5817.92166666667,"Harvest_MATIF_EUR":237.5,"Harvest_EURCZK":24.075,"Harvest_Price_CZK_t":5717.625},{"Year":2023,"CropID":"RAPE","Avg_MATIF_EUR":472.5,"Avg_EURCZK":23.9841666666667,"Avg_Price_CZK_t":11324.6166666667,"Harvest_MATIF_EUR":457.5,"Harvest_EURCZK":24.075,"Harvest_Price_CZK_t":11014.875},{"Year":2023,"CropID":"BARLEY","Avg_MATIF_EUR":237.083333333333,"Avg_EURCZK":23.9841666666667,"Avg_Price_CZK_t":5682.95833333333,"Harvest_MATIF_EUR":232.5,"Harvest_EURCZK":24.245,"Harvest_Price_CZK_t":5636.725},{"Year":2024,"CropID":"WHEAT","Avg_MATIF_EUR":215.833333333333,"Avg_EURCZK":25.1483333333333,"Avg_Price_CZK_t":5426.9875,"Harvest_MATIF_EUR":215,"Harvest_EURCZK":25.24,"Harvest_Price_CZK_t":5426.9},{"Year":2024,"CropID":"RAPE","Avg_MATIF_EUR":492.916666666667,"Avg_EURCZK":25.1483333333333,"Avg_Price_CZK_t":12398.1541666667,"Harvest_MATIF_EUR":512.5,"Harvest_EURCZK":25.24,"Harvest_Price_CZK_t":12935.65},{"Year":2024,"CropID":"BARLEY","Avg_MATIF_EUR":217.5,"Avg_EURCZK":25.1483333333333,"Avg_Price_CZK_t":5469.54166666667,"Harvest_MATIF_EUR":222.5,"Harvest_EURCZK":25.18,"Harvest_Price_CZK_t":5602.55},{"Year":2025,"CropID":"WHEAT","Avg_MATIF_EUR":211.25,"Avg_EURCZK":24.6966666666667,"Avg_Price_CZK_t":5220.51666666667,"Harvest_MATIF_EUR":197.5,"Harvest_EURCZK":24.55,"Harvest_Price_CZK_t":4848.7},{"Year":2025,"CropID":"RAPE","Avg_MATIF_EUR":501.666666666667,"Avg_EURCZK":24.6966666666667,"Avg_Price_CZK_t":12392.9583333333,"Harvest_MATIF_EUR":477.5,"Harvest_EURCZK":24.55,"Harvest_Price_CZK_t":11722.55},{"Year":2025,"CropID":"BARLEY","Avg_MATIF_EUR":214.583333333333,"Avg_EURCZK":24.6966666666667,"Avg_Price_CZK_t":5301.41666666667,"Harvest_MATIF_EUR":202.5,"Harvest_EURCZK":24.485,"Harvest_Price_CZK_t":4958.125}]};
+
+const CROP_NAMES = Object.fromEntries(DATA.crops.map(c => [c.CropID, c.Crop_Name]));
+const CROP_ORDER = ['WHEAT','RAPE','BARLEY'];
+const CROP_COLOR = {WHEAT:'#118DFF', RAPE:'#E66C37', BARLEY:'#D9B300'};
+const SALE_COLOR = {WHEAT:'#0A4F8C', RAPE:'#8F3D15', BARLEY:'#806A00'};
+const YEAR_COLOR = {2023:'#118DFF', 2024:'#E66C37', 2025:'#1AAB40'};
+const fmt = {
+  num: n => n==null||isNaN(n)?'–':new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:0}).format(n),
+  dec1: n => n==null||isNaN(n)?'–':new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:1,minimumFractionDigits:1}).format(n),
+  dec2: n => n==null||isNaN(n)?'–':new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:2,minimumFractionDigits:2}).format(n),
+  pct: n => n==null||isNaN(n)?'–':(n*100).toFixed(1)+' %',
+  mil: n => { if(n==null)return '–'; const a=Math.abs(n); if(a>=1e6) return (n/1e6).toFixed(2)+' M'; if(a>=1e3) return (n/1e3).toFixed(0)+' K'; return fmt.num(n); }
+};
+
+// ---- Populate filters ----
+const blocksById = Object.fromEntries(DATA.blocks.map(b => [b.BlockID, b]));
+function opt(sel, v, t){ const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o); }
+DATA.crops.forEach(c => opt(document.getElementById('f-crop'), c.CropID, c.Crop_Name));
+const YEARS = [...new Set(DATA.harvests.map(h=>h.Year))].sort();
+YEARS.forEach(y => opt(document.getElementById('f-year'), y, y));
+[...new Set(DATA.blocks.map(b=>b.Region))].sort().forEach(r => opt(document.getElementById('f-region'), r, r));
+DATA.blocks.forEach(b => opt(document.getElementById('f-block'), b.BlockID, `${b.BlockID} — ${b.Block_Name}`));
+
+document.getElementById('f-crop').value = 'WHEAT';
+document.querySelectorAll('select').forEach(s => s.addEventListener('change', render));
+
+// Bubble chart mode toggle
+let bubbleMode = 'by-crop';
+document.querySelectorAll('#bub-mode button').forEach(b => b.addEventListener('click', () => {
+  bubbleMode = b.dataset.mode;
+  document.querySelectorAll('#bub-mode button').forEach(x => x.classList.toggle('on', x===b));
+  renderBubble();
+}));
+
+// Treemap mode toggle
+let tmMode = 'all-crops';
+document.querySelectorAll('#tm-mode button').forEach(b => b.addEventListener('click', () => {
+  tmMode = b.dataset.mode;
+  document.querySelectorAll('#tm-mode button').forEach(x => x.classList.toggle('on', x===b));
+  renderTreemap();
+}));
+
+function getF() {
+  return {
+    crop:   document.getElementById('f-crop').value,
+    year:   document.getElementById('f-year').value,
+    region: document.getElementById('f-region').value,
+    block:  document.getElementById('f-block').value,
+  };
+}
+function filter() {
+  const f = getF();
+  return DATA.harvests.filter(h => {
+    if (f.crop !== 'all' && h.CropID !== f.crop) return false;
+    if (f.year !== 'all' && +h.Year !== +f.year) return false;
+    if (f.region !== 'all' && blocksById[h.BlockID].Region !== f.region) return false;
+    if (f.block !== 'all' && h.BlockID !== f.block) return false;
+    return true;
+  });
+}
+// Filter ignoring year (for charts that should always show all periods)
+function filterNoYear() {
+  const f = getF();
+  return DATA.harvests.filter(h => {
+    if (f.crop !== 'all' && h.CropID !== f.crop) return false;
+    if (f.region !== 'all' && blocksById[h.BlockID].Region !== f.region) return false;
+    if (f.block !== 'all' && h.BlockID !== f.block) return false;
+    return true;
+  });
+}
+
+function sumBy(rows, k){ return rows.reduce((a,r)=>a+(r[k]||0),0); }
+function wavgYield(rows){ const a=sumBy(rows,'Area_ha'); return a? sumBy(rows,'Production_t')/a : 0; }
+
+function setKPI(id, value, prev, format='num') {
+  document.getElementById(id).textContent = format==='pct'?fmt.pct(value):format==='dec2'?fmt.dec2(value):fmt.mil(value);
+  const chEl = document.getElementById(id+'-ch');
+  if (prev !== undefined && prev !== null && prev !== 0) {
+    const delta = (value - prev) / Math.abs(prev) * 100;
+    chEl.textContent = (delta>=0?'▲ +':'▼ ')+delta.toFixed(1)+' % vs předchozí rok';
+    chEl.className = 'kpi-chg '+(delta>=0?'pos':'neg');
+  } else { chEl.textContent = ''; }
+}
+
+const COL = ['#118DFF','#12239E','#E66C37','#6B007B','#E044A7','#744EC2','#D9B300','#D64550','#1AAB40','#F2C811'];
+let charts = {};
+
+// Seasonal sale basis (−6 až −10 %)
+function saleDiscount(year, month) {
+  let base;
+  if (month === 7 || month === 8) base = 0.095;
+  else if (month >= 9 && month <= 11) base = 0.080;
+  else if (month === 12 || month <= 2) base = 0.065;
+  else base = 0.075;
+  const h = ((year * 13 + month * 37) % 100) / 100;
+  const d = base + (h - 0.5) * 0.01;
+  return Math.max(0.06, Math.min(0.10, d));
+}
+
+function makeOrUpdate(id, type, config) {
+  if (charts[id]) { charts[id].destroy(); }
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, { type, ...config });
+}
+
+function renderPrice(currentCrop) {
+  const months = [...new Set(DATA.prices_monthly.map(p => `${p.Year}-${String(p.Month).padStart(2,'0')}`))].sort();
+  const cropsToShow = currentCrop==='all' ? CROP_ORDER : [currentCrop];
+  const datasets = [];
+  cropsToShow.forEach(cid => {
+    const matifData = months.map(ym => {
+      const [y,m] = ym.split('-').map(Number);
+      const p = DATA.prices_monthly.find(x => x.CropID===cid && +x.Year===y && +x.Month===m);
+      return p ? p.Price_CZK : null;
+    });
+    const saleData = months.map(ym => {
+      const [y,m] = ym.split('-').map(Number);
+      const p = DATA.prices_monthly.find(x => x.CropID===cid && +x.Year===y && +x.Month===m);
+      return p ? p.Price_CZK * (1 - saleDiscount(y, m)) : null;
+    });
+    datasets.push({
+      label: `${CROP_NAMES[cid]} MATIF`,
+      data: matifData,
+      borderColor: CROP_COLOR[cid],
+      backgroundColor: CROP_COLOR[cid]+'15',
+      borderWidth: 2, tension: .3, pointRadius: 2, fill: false
+    });
+    datasets.push({
+      label: `${CROP_NAMES[cid]} prodejní (sim.)`,
+      data: saleData,
+      borderColor: SALE_COLOR[cid],
+      backgroundColor: SALE_COLOR[cid]+'15',
+      borderWidth: 2, borderDash:[5,3], tension: .3, pointRadius: 2, fill: false
+    });
+  });
+  document.getElementById('ch-price-title').textContent =
+    cropsToShow.length === 1
+      ? `Vývoj cen — ${CROP_NAMES[cropsToShow[0]]} (MATIF vs. realizační prodejní, CZK/t)`
+      : 'Vývoj cen — MATIF vs. realizační prodejní cena per plodina (CZK/t)';
+
+  makeOrUpdate('ch-price', 'line', {
+    data: { labels: months, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{position:'top',labels:{usePointStyle:true,boxWidth:8,font:{size:10}}},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt.num(c.parsed.y)}`}}},
+      scales:{
+        y:{position:'left',ticks:{callback:v=>fmt.num(v)},title:{display:true,text:'CZK/t'}},
+        x:{ticks:{maxRotation:45,minRotation:45,font:{size:10},autoSkip:true,maxTicksLimit:18}}
+      }
+    }
+  });
+}
+
+function renderYieldLines(currentCrop, f) {
+  // Always all years, regardless of year filter.
+  const blocksForLines = DATA.blocks.filter(b =>
+    (f.region==='all' || b.Region===f.region) &&
+    (f.block==='all' || b.BlockID===f.block)
+  ).sort((a,b)=>a.BlockID.localeCompare(b.BlockID));
+
+  let datasets;
+  if (currentCrop === 'all') {
+    // 1 linie na kombinaci plodina×rok (9 lines)
+    document.getElementById('ch-yl-title').textContent = 'Výnosy dle bloku (t/ha) — plodina × rok';
+    datasets = [];
+    CROP_ORDER.forEach(cid => {
+      YEARS.forEach(y => {
+        datasets.push({
+          label: `${CROP_NAMES[cid]} ${y}`,
+          data: blocksForLines.map(b => {
+            const h = DATA.harvests.find(x => x.BlockID===b.BlockID && x.CropID===cid && +x.Year===+y);
+            return h ? h.Yield_t_ha : null;
+          }),
+          borderColor: CROP_COLOR[cid],
+          backgroundColor: CROP_COLOR[cid]+'22',
+          borderWidth: y===2023 ? 2.5 : (y===2024 ? 1.8 : 1.2),
+          borderDash: y===2024 ? [4,3] : (y===2025 ? [2,2] : []),
+          tension: .3, pointRadius: 2, pointHoverRadius: 5, fill: false, spanGaps: true
+        });
+      });
+    });
+  } else {
+    // 1 linie na rok pro vybranou plodinu
+    document.getElementById('ch-yl-title').textContent = `Výnosy — ${CROP_NAMES[currentCrop]} dle bloku a roku (t/ha)`;
+    datasets = YEARS.map(y => ({
+      label: String(y),
+      data: blocksForLines.map(b => {
+        const h = DATA.harvests.find(x => x.BlockID===b.BlockID && x.CropID===currentCrop && +x.Year===+y);
+        return h ? h.Yield_t_ha : null;
+      }),
+      borderColor: YEAR_COLOR[y],
+      backgroundColor: YEAR_COLOR[y]+'22',
+      borderWidth: 2.5, tension: .3, pointRadius: 4, pointHoverRadius: 6, fill: false, spanGaps: true
+    }));
+  }
+  makeOrUpdate('ch-yield-lines', 'line', {
+    data: { labels: blocksForLines.map(b => b.BlockID), datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{position:'top',labels:{usePointStyle:true,boxWidth:8,font:{size:10}}},
+        tooltip:{callbacks:{
+          title: items => { const id = items[0].label; const b = blocksById[id]; return b ? `${id} — ${b.Block_Name}` : id; },
+          label: c => `${c.dataset.label}: ${c.parsed.y==null?'–':fmt.dec2(c.parsed.y)} t/ha`
+        }}
+      },
+      scales:{
+        y:{beginAtZero:false,title:{display:true,text:'t/ha'},ticks:{callback:v=>fmt.dec1(v)}},
+        x:{title:{display:true,text:'Půdní blok'}}
+      }
+    }
+  });
+}
+
+function renderBubble() {
+  const f = getF();
+  const scaleR = v => {
+    // map |GM| → radius in px (min 4, max 40)
+    const maxAbs = 4_000_000; // expected magnitude for aggregated GM CZK
+    return Math.max(4, Math.min(40, 4 + Math.sqrt(Math.max(0, Math.abs(v)/maxAbs)) * 36));
+  };
+  let datasets = [];
+  let subtitle = '';
+  if (bubbleMode === 'by-crop') {
+    // Plodiny v roce: X=tržby CZK, Y=plocha ha, R=|GM|, one bubble per crop
+    const year = f.year==='all' ? YEARS[YEARS.length-1] : +f.year;
+    subtitle = `Plodiny v roce ${year}`;
+    CROP_ORDER.forEach(cid => {
+      const rs = DATA.harvests.filter(h => h.CropID===cid && +h.Year===year &&
+        (f.region==='all' || blocksById[h.BlockID].Region===f.region) &&
+        (f.block==='all' || h.BlockID===f.block));
+      if (!rs.length) return;
+      const area = sumBy(rs,'Area_ha');
+      const rev = sumBy(rs,'Revenue');
+      const gm = sumBy(rs,'GM_CZK');
+      datasets.push({
+        label: `${CROP_NAMES[cid]} · tržby ${fmt.mil(rev)} · GM ${fmt.mil(gm)}`,
+        data: [{x: rev, y: area, r: scaleR(gm), _gm: gm, _rev: rev, _crop: cid, _year: year}],
+        backgroundColor: CROP_COLOR[cid]+'cc',
+        borderColor: CROP_COLOR[cid],
+        borderWidth: 1.5
+      });
+    });
+  } else {
+    // Plodina v letech: X=tržby CZK, Y=plocha, R=GM, one bubble per year
+    const crop = f.crop==='all' ? 'WHEAT' : f.crop;
+    subtitle = `${CROP_NAMES[crop]} v letech ${YEARS.join(', ')}`;
+    YEARS.forEach(y => {
+      const rs = DATA.harvests.filter(h => h.CropID===crop && +h.Year===y &&
+        (f.region==='all' || blocksById[h.BlockID].Region===f.region) &&
+        (f.block==='all' || h.BlockID===f.block));
+      if (!rs.length) return;
+      const area = sumBy(rs,'Area_ha');
+      const rev = sumBy(rs,'Revenue');
+      const gm = sumBy(rs,'GM_CZK');
+      datasets.push({
+        label: `${y} · tržby ${fmt.mil(rev)} · GM ${fmt.mil(gm)}`,
+        data: [{x: rev, y: area, r: scaleR(gm), _gm: gm, _rev: rev, _crop: crop, _year: y}],
+        backgroundColor: YEAR_COLOR[y]+'cc',
+        borderColor: YEAR_COLOR[y],
+        borderWidth: 1.5
+      });
+    });
+  }
+  document.getElementById('ch-bub-title').textContent = `Plocha × tržby × hrubá marže — ${subtitle}`;
+
+  makeOrUpdate('ch-bubble', 'bubble', {
+    data: { datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'top',labels:{usePointStyle:true,boxWidth:8,font:{size:10}}},
+        tooltip:{callbacks:{
+          label: c => {
+            const d = c.raw;
+            return [
+              `${bubbleMode==='by-crop' ? CROP_NAMES[d._crop] : d._year}`,
+              `Tržby: ${fmt.mil(d._rev)} Kč`,
+              `Plocha: ${fmt.dec1(d.y)} ha`,
+              `Hrubá marže: ${fmt.mil(d._gm)} Kč`
+            ];
+          }
+        }}
+      },
+      scales:{
+        x:{title:{display:true,text:'Tržby (Kč)'},ticks:{callback:v=>fmt.mil(v)}},
+        y:{title:{display:true,text:'Osetá plocha (ha)'},ticks:{callback:v=>fmt.num(v)}}
+      }
+    }
+  });
+}
+
+function renderTreemap() {
+  const f = getF();
+  const year = f.year==='all' ? YEARS[YEARS.length-1] : +f.year;
+
+  // Build base rows (respect region/block filters). Treemap vyžaduje kladnou hodnotu pro
+  // velikost dlaždice, takže použijeme |GM| — ztráty odlišíme barvou (červená).
+  const base = DATA.harvests
+    .filter(h => +h.Year===year &&
+      (f.region==='all' || blocksById[h.BlockID].Region===f.region) &&
+      (f.block==='all' || h.BlockID===f.block))
+    .map(h => ({
+      crop: CROP_NAMES[h.CropID],
+      cropId: h.CropID,
+      block: h.BlockID,
+      blockName: blocksById[h.BlockID].Block_Name,
+      gm: h.GM_CZK,
+      gmAbs: Math.max(Math.abs(h.GM_CZK), 1),  // malý floor, aby dlaždice s GM ≈ 0 byla vidět
+      isLoss: h.GM_CZK < 0
+    }));
+
+  // Subtitle + legend
+  const legendEl = document.getElementById('tm-legend');
+  let tree = [];
+  if (tmMode === 'all-crops') {
+    // Agregace na úrovni plodiny (3 dlaždice, žádné PB)
+    const byCrop = {};
+    base.forEach(d => {
+      if (!byCrop[d.cropId]) byCrop[d.cropId] = {crop: d.crop, cropId: d.cropId, gm: 0, block: '', blockName: `${CROP_NAMES[d.cropId]} — souhrn`};
+      byCrop[d.cropId].gm += d.gm;
+    });
+    tree = CROP_ORDER.map(cid => byCrop[cid]).filter(Boolean).map(d => ({
+      ...d, gmAbs: Math.max(Math.abs(d.gm), 1), isLoss: d.gm < 0
+    })).sort((a,b) => b.gmAbs - a.gmAbs);
+    document.getElementById('ch-tm-title').textContent = `Hrubá marže dle plodin (${year})`;
+    legendEl.innerHTML = `
+      <span style="font-weight:600;color:#111">Plocha dlaždice = hrubá marže (Kč) · Barva = plodina</span>
+      <span style="flex:1"></span>` +
+      CROP_ORDER.map(cid =>
+        `<span style="display:inline-flex;align-items:center;gap:5px">
+           <span style="display:inline-block;width:12px;height:12px;background:${CROP_COLOR[cid]};border-radius:2px"></span>
+           ${CROP_NAMES[cid]}
+         </span>`).join('');
+  } else {
+    const crop = f.crop==='all' ? 'WHEAT' : f.crop;
+    tree = base.filter(d => d.cropId===crop).sort((a,b) => b.gmAbs - a.gmAbs);
+    document.getElementById('ch-tm-title').textContent = `Hrubá marže dle bloku — ${CROP_NAMES[crop]} (${year})`;
+    const maxGM = tree.length ? tree[0].gmAbs : 1;
+    legendEl.innerHTML = `
+      <span style="font-weight:600;color:#111">Plocha dlaždice = |hrubá marže| · Barva = zisk vs. ztráta</span>
+      <span style="flex:1"></span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <span style="display:inline-block;width:12px;height:12px;background:${CROP_COLOR[crop]};border-radius:2px"></span> zisk
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:5px">
+        <span style="display:inline-block;width:12px;height:12px;background:#C2314D;border-radius:2px"></span> ztráta
+      </span>
+      <span style="margin-left:12px;color:#111">Max |GM|: ${fmt.mil(maxGM)} Kč · ${tree.length} bloků</span>`;
+    // attach maxGM for color interpolation
+    tree.forEach(d => d._max = maxGM);
+  }
+
+  makeOrUpdate('ch-treemap', 'treemap', {
+    data: {
+      datasets: [{
+        tree,
+        key: 'gmAbs',
+        spacing: 1,
+        borderWidth: 1,
+        borderColor: '#fff',
+        backgroundColor: ctx => {
+          if (ctx.type !== 'data') return 'transparent';
+          const d = ctx.raw && ctx.raw._data;
+          if (!d) return 'rgba(0,0,0,0.1)';
+          if (tmMode === 'all-crops') {
+            return d.isLoss ? '#C2314Dcc' : (CROP_COLOR[d.cropId] + 'cc');
+          } else {
+            if (d.isLoss) return '#C2314Dcc';
+            const t = d._max ? Math.max(0.25, d.gmAbs / d._max) : 0.5;
+            const alpha = Math.round(t * 255).toString(16).padStart(2,'0');
+            return CROP_COLOR[d.cropId] + alpha;
+          }
+        },
+        labels: {
+          display: true,
+          color: '#fff',
+          font: {size: 11, weight: 'bold'},
+          formatter: ctx => {
+            const d = ctx.raw && ctx.raw._data;
+            if (!d) return '';
+            if (tmMode === 'all-crops') {
+              return [d.crop, fmt.mil(d.gm) + ' Kč'];
+            } else {
+              return [`${d.block} — ${d.blockName}`, fmt.mil(d.gm) + ' Kč'];
+            }
+          }
+        }
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title: items => {
+            const d = items[0].raw && items[0].raw._data;
+            if (!d) return '';
+            return tmMode === 'all-crops' ? d.crop : `${d.block} — ${d.blockName}`;
+          },
+          label: ctx => {
+            const d = ctx.raw && ctx.raw._data;
+            if (!d) return '';
+            return tmMode === 'all-crops'
+              ? [`Hrubá marže: ${fmt.num(d.gm)} Kč`]
+              : [`${d.crop}`, `Hrubá marže: ${fmt.num(d.gm)} Kč`];
+          }
+        }}
+      }
+    }
+  });
+}
+
+function render() {
+  const f = getF();
+  const rows = filter();
+  const currentYear = f.year;
+  const currentCrop = f.crop;
+
+  // KPI
+  const totalProd = sumBy(rows, 'Production_t');
+  const totalRev = sumBy(rows, 'Revenue');
+  const totalCost = sumBy(rows, 'Total_Cost');
+  const totalGM = totalRev - totalCost;
+  const avgYld = wavgYield(rows);
+  const gmPct = totalRev ? totalGM/totalRev : 0;
+
+  let prev = {};
+  if (currentYear !== 'all') {
+    const idx = YEARS.indexOf(+currentYear);
+    if (idx > 0) {
+      const prevY = YEARS[idx-1];
+      const prevRows = DATA.harvests.filter(h => +h.Year===+prevY &&
+        (currentCrop==='all' || h.CropID===currentCrop) &&
+        (f.region==='all'||blocksById[h.BlockID].Region===f.region) &&
+        (f.block==='all'||h.BlockID===f.block));
+      prev.prod = sumBy(prevRows,'Production_t');
+      prev.rev = sumBy(prevRows,'Revenue');
+      prev.cost = sumBy(prevRows,'Total_Cost');
+      prev.gm = prev.rev - prev.cost;
+      prev.yld = wavgYield(prevRows);
+      prev.gmPct = prev.rev ? prev.gm/prev.rev : 0;
+    }
+  }
+  setKPI('k-prod', totalProd, prev.prod);
+  setKPI('k-yld', avgYld, prev.yld, 'dec2');
+  setKPI('k-rev', totalRev, prev.rev);
+  setKPI('k-cost', totalCost, prev.cost);
+  setKPI('k-gm', totalGM, prev.gm);
+  setKPI('k-gmp', gmPct, prev.gmPct, 'pct');
+
+  renderPrice(currentCrop);
+  renderYieldLines(currentCrop, f);
+  renderBubble();
+  renderTreemap();
+
+  // ---- Cost structure stacked by year (uses filtered rows incl. year) ----
+  const costCats = ['Osivo','Hnojiva','POR','Mechanizace','Najem','Pojisteni','Ostatni'];
+  const yearsArr = [...new Set(rows.map(r=>r.Year))].sort();
+  const costDS = costCats.map((cat,i) => ({
+    label: cat==='Najem'?'Nájem':cat==='Pojisteni'?'Pojištění':cat==='Ostatni'?'Ostatní':cat,
+    data: yearsArr.map(y => {
+      const rs = rows.filter(r => +r.Year===+y);
+      const area = sumBy(rs,'Area_ha');
+      return area ? sumBy(rs.map(r=>({v:r[cat]*r.Area_ha})),'v')/area : 0;
+    }),
+    backgroundColor: COL[i]
+  }));
+  makeOrUpdate('ch-cost', 'bar', {
+    data: { labels: yearsArr, datasets: costDS },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:8,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt.num(c.parsed.y)} CZK/ha`}}},
+      scales:{ x:{stacked:true}, y:{stacked:true,ticks:{callback:v=>fmt.num(v)}} }
+    }
+  });
+
+  // ---- Aggregates per block (for ch-gm and ch-rc) ----
+  const byBlock = {};
+  rows.forEach(r => { if(!byBlock[r.BlockID]) byBlock[r.BlockID]={area:0,prod:0,rev:0,cost:0,gmha:0,ct:0};
+    byBlock[r.BlockID].area+=r.Area_ha; byBlock[r.BlockID].prod+=r.Production_t;
+    byBlock[r.BlockID].rev+=r.Revenue; byBlock[r.BlockID].cost+=r.Total_Cost;
+    byBlock[r.BlockID].gmha+=r.GM_CZK_ha; byBlock[r.BlockID].ct++;
+  });
+  const blockIds = Object.keys(byBlock).sort();
+
+  makeOrUpdate('ch-gm', 'bar', {
+    data: {
+      labels: blockIds,
+      datasets: [{ label:'CZK/ha',
+        data: blockIds.map(id => byBlock[id].ct ? byBlock[id].gmha/byBlock[id].ct : 0),
+        backgroundColor: blockIds.map(id => (byBlock[id].gmha/byBlock[id].ct)>=0 ? COL[8]+'cc' : COL[7]+'cc'),
+        borderRadius:3 }]
+    },
+    options: {responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
+      tooltip:{callbacks:{label:c=>`${fmt.num(c.parsed.y)} CZK/ha`}}},
+      scales:{y:{ticks:{callback:v=>fmt.num(v)}}}}
+  });
+
+  makeOrUpdate('ch-rc', 'bar', {
+    data: {
+      labels: blockIds,
+      datasets: [
+        {label:'Tržby', data: blockIds.map(id=>byBlock[id].rev), backgroundColor:COL[8]+'cc', borderRadius:3},
+        {label:'Náklady', data: blockIds.map(id=>byBlock[id].cost), backgroundColor:COL[7]+'cc', borderRadius:3}
+      ]
+    },
+    options: {responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{usePointStyle:true,boxWidth:8}},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt.num(c.parsed.y)} CZK`}}},
+      scales:{y:{ticks:{callback:v=>fmt.mil(v)}}}}
+  });
+
+  // ---- Crop comparison (ignores crop filter) ----
+  const cmpDS = CROP_ORDER.map(cid => ({
+    label: CROP_NAMES[cid],
+    data: YEARS.map(y => {
+      const rs = DATA.harvests.filter(h => h.CropID===cid && +h.Year===+y &&
+        (f.region==='all' || blocksById[h.BlockID].Region===f.region) &&
+        (f.block==='all' || h.BlockID===f.block));
+      if (!rs.length) return 0;
+      const area = sumBy(rs, 'Area_ha');
+      return area ? sumBy(rs, 'GM_CZK')/area : 0;
+    }),
+    backgroundColor: CROP_COLOR[cid]+'cc',
+    borderColor: CROP_COLOR[cid],
+    borderWidth: 1, borderRadius: 3
+  }));
+  makeOrUpdate('ch-crop-cmp', 'bar', {
+    data: { labels: YEARS, datasets: cmpDS },
+    options: {responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'top',labels:{usePointStyle:true,boxWidth:8}},
+        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt.num(c.parsed.y)} CZK/ha`}}},
+      scales:{y:{ticks:{callback:v=>fmt.num(v)}}}}
+  });
+
+  // ---- Table ----
+  const cols = [
+    {k:'HarvestID',h:'ID'},
+    {k:'Year',h:'Rok',num:true},
+    {k:'CropID',h:'Plodina',derive:r=>`<span class="chip ${r.CropID}">${CROP_NAMES[r.CropID]}</span>`},
+    {k:'BlockID',h:'Blok'},
+    {k:'Block_Name',h:'Název',derive:r=>blocksById[r.BlockID].Block_Name},
+    {k:'Region',h:'Katastr',derive:r=>blocksById[r.BlockID].Region},
+    {k:'Area_ha',h:'Plocha (ha)',num:true,fmt:fmt.dec1},
+    {k:'Yield_t_ha',h:'Výnos (t/ha)',num:true,fmt:fmt.dec2},
+    {k:'Production_t',h:'Produkce (t)',num:true,fmt:fmt.dec1},
+    {k:'Cost_CZK_ha',h:'Náklady (CZK/ha)',num:true,fmt:fmt.num},
+    {k:'Price_CZK_t',h:'Cena (CZK/t)',num:true,fmt:fmt.num},
+    {k:'Revenue',h:'Tržby (CZK)',num:true,fmt:fmt.num},
+    {k:'GM_CZK',h:'Marže (CZK)',num:true,fmt:fmt.num,sign:true},
+    {k:'GM_CZK_ha',h:'Marže (CZK/ha)',num:true,fmt:fmt.num,sign:true},
+    {k:'GM_Pct',h:'Marže %',num:true,fmt:fmt.pct,sign:true},
+  ];
+  const thead = document.querySelector('#tbl thead');
+  const tbody = document.querySelector('#tbl tbody');
+  thead.innerHTML = '<tr>' + cols.map((c,i)=>`<th data-col="${i}">${c.h}</th>`).join('') + '</tr>';
+  const sorted = [...rows].sort((a,b)=> a.Year - b.Year || a.BlockID.localeCompare(b.BlockID) || a.CropID.localeCompare(b.CropID));
+  function renderTbody(data){
+    tbody.innerHTML = data.map(r => '<tr>' + cols.map(c => {
+      const v = c.derive ? c.derive(r) : r[c.k];
+      const raw = c.derive ? r[c.k] : v;
+      const cls = (c.num?'num ':'') + (c.sign && typeof raw==='number' ? (raw<0?'neg':raw>0?'pos':'') : '');
+      return `<td class="${cls}">${c.fmt?c.fmt(raw):v}</td>`;
+    }).join('') + '</tr>').join('');
+  }
+  renderTbody(sorted);
+  thead.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+    const i = +th.dataset.col, c = cols[i];
+    const dir = th.dataset.dir==='asc'?'desc':'asc'; th.dataset.dir=dir;
+    sorted.sort((a,b)=>{ const va=a[c.k], vb=b[c.k];
+      const cmp = va<vb?-1:va>vb?1:0; return dir==='asc'?cmp:-cmp; });
+    renderTbody(sorted);
+  }));
+}
+
+render();
+</script>
+</body>
+</html>
